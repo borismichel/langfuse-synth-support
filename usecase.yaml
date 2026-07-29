@@ -1,12 +1,26 @@
 # usecase.yaml — schema version 1 (scaffolded by `synth-authoring new`).
-# The ONLY integration surface between this kit and the Demo Depot portal. Passes
-# `synth-authoring validate` as-is; grow it as the kit's story lands.
+# The ONLY integration surface between this kit and the Demo Depot portal.
 schema_version: 1
 slug: support-triage-deflection
-name: Support Triage Deflection
-tagline: A scaffolded Demo Depot synth kit — replace this with the demo's hook.
-story: Scaffolded walking skeleton. Replace this with the story a solutions engineer
-  walks — the failure the demo stages and the Langfuse feature it lands.
+name: "Support Triage Deflection Decay"
+tagline: "A KB re-index quietly halves retrieval quality — deflection falls, cost per ticket rises, and nothing ever errors."
+vertical: "Customer Support / Service Operations"
+story: |
+  A support-triage agent handles customer tickets end to end: classify the intent,
+  search the knowledge base, draft a reply, hand off to a human only when it cannot
+  stand behind the answer. Then the KB is re-indexed. Retrieval quality collapses
+  from ~0.82 to ~0.54 top-chunk relevance, the agent starts retrying its searches,
+  context grows, and escalations jump from ~5% to ~44% — with a zero error rate the
+  whole way. This kit backfills 28 days of backdated traces across that boundary so
+  an SA can walk the diagnosis in one sitting: session replay of a ticket that went
+  wrong, the retriever span that explains it, and the cost and deflection curves that
+  put a number on the damage.
+langfuse_features:
+  - tracing
+  - sessions
+  - cost-tracking
+  - scores
+  - user-feedback
 target:
   project_hint: demo
   supports:
