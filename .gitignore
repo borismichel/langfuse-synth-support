@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
+# `pip install -e .` writes src/<dist_name>.egg-info/ — a build artifact, never committed.
+*.egg-info/
 .venv/
 .synth_spool/
 .env
