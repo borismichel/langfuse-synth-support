@@ -44,7 +44,7 @@ from .config import DERIVATION_HOOK
 
 # Fixed anchor so backdated timestamps are reproducible run-to-run (the gate materializes
 # in a subprocess and may read no wall clock).
-RUN_DATE = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+RUN_DATE = datetime(2026, 7, 29, 12, 0, 0, tzinfo=timezone.utc)
 WINDOW_DAYS = 28
 
 # The regression boundary: the KB re-index lands 10 days before the run date, leaving a
