@@ -9,6 +9,7 @@ golden gate holds).
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,10 +19,21 @@ from langfuse_synth_core.derivation import identity_derivation
 
 @dataclass
 class Target:
-    """The Langfuse instance a run points at (the library reads `base_url`)."""
+    """The Langfuse instance a run points at (the library reads `base_url`).
 
-    base_url: str = "http://localhost:3000"
+    `host` is the committed default and `LANGFUSE_BASE_URL` overrides it — that override is
+    how the portal retargets ONE shipped config at whatever Langfuse a deployment points to.
+    Without it this kit dialled its own loopback on every deployment (portal #187);
+    `tests/test_retargeting.py` gates against a regression.
+    """
+
+    host: str = "http://localhost:3000"
     project_hint: str = "demo"
+
+    @property
+    def base_url(self) -> str:
+        # env wins so the same shipped config can target different instances
+        return os.environ.get("LANGFUSE_BASE_URL", self.host).rstrip("/")
 
 
 @dataclass
@@ -43,7 +55,7 @@ def _model_factory(raw: dict) -> Config:
     generation = raw.get("generation") or {}
     return Config(
         target=Target(
-            base_url=str(target.get("base_url", "http://localhost:3000")),
+            host=str(target.get("host", "http://localhost:3000")),
             project_hint=str(target.get("project_hint", "demo")),
         ),
         generation=Generation(
