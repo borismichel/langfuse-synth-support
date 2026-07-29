@@ -63,17 +63,23 @@ Filter traces to `kb-v2` and open one that escalated. Walk the tree:
 
 ```
 support-triage-turn
-└─ triage-agent            (AGENT)
-   ├─ classify-intent      (GENERATION)  — fine, cheap, correct
-   ├─ kb-search            (RETRIEVER)   — top_score 0.41  ← here
-   ├─ kb-search            (RETRIEVER)   — retry, 0.36
-   ├─ draft-reply          (GENERATION)  — 3x the context of a healthy turn
-   └─ escalate-to-human    (TOOL)        — WARNING: below confidence floor
+└─ triage-agent            [agent]      — encloses the whole turn
+   ├─ classify-intent      GENERATION   — fine, cheap, correct
+   ├─ kb-search            [retriever]  — top_score 0.52  ← here
+   ├─ kb-search            [retriever]  — retry, 0.46
+   ├─ draft-reply          GENERATION   — 3x the context of a healthy turn
+   └─ escalate-to-human    [tool]       — WARNING: below confidence floor
 ```
 
+**A presenter's note on those labels.** Langfuse's agent-graph types (`AGENT`, `RETRIEVER`,
+`TOOL`) are set over OTLP; the batch ingestion API used for backdating accepts only
+SPAN / GENERATION / EVENT. So the bracketed steps above arrive as **spans** and carry their
+intended type in `metadata.observation_type` — named, nested, and filterable, just without a
+native type badge in the UI. Don't promise a badge you are about to not show.
+
 The `retrieval_relevance` score sits on the **retriever observation**, not on the trace —
-so the number is attached to the step that produced it. Open the retriever's metadata and
-show `kb_index_version: kb-v2`.
+so the number is attached to the step that produced it. Open that span's metadata and show
+both `observation_type: retriever` and `kb_index_version: kb-v2`.
 
 Now open a `kb-v1` trace beside it: one retrieval round, `top_score` around 0.85, no
 handoff. Same agent, same prompt, same model. The only difference is the index.
