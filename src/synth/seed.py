@@ -12,6 +12,7 @@ from pathlib import Path
 
 from langfuse_synth_core.seed.ingest import Ingestor, assert_demo_project
 
+from .artifacts import publish_runbook
 from .config import Config
 from .materialize import build_events
 
@@ -44,4 +45,9 @@ def run_seed(
     if do_import and not dry_run:
         sent = ingestor.import_spool(path=spool_path, log=log)
         log(f"✓ imported {sent} events")
+
+    # The portal collects declared artifacts from the container's /app/out after this step
+    # exits. Skipped under dry_run so the determinism gate stays a pure read of the Spool.
+    if not dry_run:
+        publish_runbook(log=log)
     return spool_path

@@ -71,9 +71,10 @@ llm:
   - openai
 live_components:
 - name: companion
-  description: Scaffolded live companion surface — a placeholder page served on the
-    Companion Adapter. Replace it with the kit's live scene (routes, forms, an in-scene
-    view).
+  description: Live triage console — ask the support agent a real question, flip the
+    knowledge-base index between kb-v1 and the botched kb-v2 re-index, and watch
+    retrieval collapse and the agent hand off. Each run emits a real Langfuse trace
+    into this project, in the same shape as the seeded pool.
   command: synth companion --config {config} --host 0.0.0.0 --port 8080
   port: 8080
   requires_secrets:
@@ -82,5 +83,5 @@ live_components:
   - LLM_API_KEY
   routes:
   - path: /
-    title: Support Triage Deflection
+    title: Live triage console
   health_path: /healthz

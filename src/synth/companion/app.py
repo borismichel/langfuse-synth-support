@@ -272,17 +272,24 @@ def _console_page(*, session_id: str, question: str = "", index_version: str = "
     body = [
         "<p class='eyebrow'>Live triage console</p>",
         "<h1>Break it <span class='mark'>on purpose</span>.</h1>",
-        "<p class='sub'>Ask the support agent something, then switch the knowledge-base "
-        "index. <code>kb-v1</code> is healthy; <code>kb-v2</code> is the botched re-index "
-        "that dropped article titles and orphaned each opening paragraph. Every submission "
-        "emits a real Langfuse trace into this project, alongside the seeded history.</p>",
+        (
+            "<p class='sub'>Ask the support agent something, then switch the knowledge-base "
+            "index. <code>kb-v1</code> is healthy; <code>kb-v2</code> is the botched re-index "
+            "that dropped article titles and orphaned each opening paragraph. Every "
+            "submission emits a real Langfuse trace into this project, alongside the seeded "
+            "history.</p>"
+        ),
         f"<form method='post' action='{paths.local('/triage')}'>",
         f"<input type='hidden' name='session_id' value='{e(session_id)}'>",
-        "<p><textarea name='question' rows='3' style='width:100%' "
-        "placeholder='e.g. I was charged twice for my order, can I get a refund?'>"
-        f"{e(question)}</textarea></p>",
-        f"<p><label>Knowledge-base index &nbsp;<select name='index_version'>{options}"
-        "</select></label> &nbsp; <button type='submit'>Run triage</button></p>",
+        (
+            "<p><textarea name='question' rows='3' style='width:100%' "
+            "placeholder='e.g. I was charged twice for my order, can I get a refund?'>"
+            f"{e(question)}</textarea></p>"
+        ),
+        (
+            f"<p><label>Knowledge-base index &nbsp;<select name='index_version'>{options}"
+            "</select></label> &nbsp; <button type='submit'>Run triage</button></p>"
+        ),
         "</form>",
     ]
 
@@ -294,10 +301,12 @@ def _console_page(*, session_id: str, question: str = "", index_version: str = "
         body += [
             "<hr>",
             f"<h2>{verdict}</h2>",
-            f"<p class='sub'>intent <code>{e(result.intent)}</code> &middot; index "
-            f"<code>{e(result.index_version)}</code> &middot; top relevance "
-            f"<strong>{result.best:.2f}</strong> (escalation floor "
-            f"{RELEVANCE_ESCALATION_FLOOR})</p>",
+            (
+                f"<p class='sub'>intent <code>{e(result.intent)}</code> &middot; index "
+                f"<code>{e(result.index_version)}</code> &middot; top relevance "
+                f"<strong>{result.best:.2f}</strong> (escalation floor "
+                f"{RELEVANCE_ESCALATION_FLOOR})</p>"
+            ),
             f"<blockquote>{e(result.reply)}</blockquote>",
             "<h3>What the search returned</h3><ul>",
         ]
