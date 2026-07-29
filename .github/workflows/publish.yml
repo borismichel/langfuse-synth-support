@@ -1,0 +1,25 @@
+# Builds, GHCR-pushes, and cosign-signs this kit's image on every semver tag push. The
+# actual build/sign logic lives once in langfuse-synth-core so every kit inherits a fix
+# or policy change on its next pin bump — see
+# https://github.com/borismichel/langfuse-synth-core/blob/main/docs/CI_SIGNING.md
+#
+# Cut a release: tag this repo `vX.Y.Z` and push the tag.
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    uses: borismichel/langfuse-synth-core/.github/workflows/kit-publish.yml@v1.4.0
+    permissions:
+      contents: read
+      packages: write
+      id-token: write

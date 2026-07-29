@@ -1,0 +1,72 @@
+# usecase.yaml — schema version 1 (scaffolded by `synth-authoring new`).
+# The ONLY integration surface between this kit and the Demo Depot portal. Passes
+# `synth-authoring validate` as-is; grow it as the kit's story lands.
+schema_version: 1
+slug: support-triage-deflection
+name: Support Triage Deflection
+tagline: A scaffolded Demo Depot synth kit — replace this with the demo's hook.
+story: Scaffolded walking skeleton. Replace this with the story a solutions engineer
+  walks — the failure the demo stages and the Langfuse feature it lands.
+target:
+  project_hint: demo
+  supports:
+  - cloud_eu
+  - cloud_us
+  - self_hosted
+base_config:
+  default: config/demo.yaml
+config_schema:
+  type: object
+  properties:
+    generation.seed:
+      type: integer
+      default: 42
+      minimum: 0
+      title: Generation seed
+      description: Deterministic RNG seed for the whole dataset. Vary it to mint a
+        distinct trace/id set per deployment; the same seed re-seeds idempotently
+        (upsert).
+    generation.target_traces:
+      type: integer
+      minimum: 1
+      maximum: 100000
+      default: 1000
+      title: Target traces
+      description: Total number of traces to generate. The single, uniform volume
+        knob for this demo; the kit deterministically derives its internal generation
+        params from it.
+  required: []
+pipeline:
+- id: seed
+  run: synth seed --config {config}
+  timeout_minutes: 90
+- id: verify
+  run: synth verify --config {config}
+  fatal: true
+artifacts:
+- path: DEMO_SCRIPT.md
+  render: markdown
+  title: Presenter Runbook
+assets:
+  docs:
+  - path: README.md
+    title: Overview
+llm:
+  providers:
+  - anthropic
+  - openai
+live_components:
+- name: companion
+  description: Scaffolded live companion surface — a placeholder page served on the
+    Companion Adapter. Replace it with the kit's live scene (routes, forms, an in-scene
+    view).
+  command: synth companion --config {config} --host 0.0.0.0 --port 8080
+  port: 8080
+  requires_secrets:
+  - LANGFUSE_PUBLIC_KEY
+  - LANGFUSE_SECRET_KEY
+  - LLM_API_KEY
+  routes:
+  - path: /
+    title: Support Triage Deflection
+  health_path: /healthz

@@ -1,0 +1,8 @@
+langfuse-synth-core[companion] @ git+https://github.com/borismichel/langfuse-synth-core@v1.4.0
+langfuse<5,>=4.0
+PyYAML<7,>=6
+requests>=2.31
+
+[dev]
+pytest<9,>=8
+langfuse-synth-core[authoring] @ git+https://github.com/borismichel/langfuse-synth-core@v1.4.0

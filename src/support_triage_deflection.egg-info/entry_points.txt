@@ -1,0 +1,2 @@
+[console_scripts]
+synth = synth.cli:main

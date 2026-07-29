@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: support-triage-deflection
+Version: 0.1.0
+Summary: Demo Depot synth kit — a runnable-green walking skeleton scaffolded by `synth-authoring new`.
+Requires-Python: >=3.11
+Requires-Dist: langfuse-synth-core[companion] @ git+https://github.com/borismichel/langfuse-synth-core@v1.4.0
+Requires-Dist: langfuse<5,>=4.0
+Requires-Dist: PyYAML<7,>=6
+Requires-Dist: requests>=2.31
+Provides-Extra: dev
+Requires-Dist: pytest<9,>=8; extra == "dev"
+Requires-Dist: langfuse-synth-core[authoring] @ git+https://github.com/borismichel/langfuse-synth-core@v1.4.0 ; extra == "dev"
