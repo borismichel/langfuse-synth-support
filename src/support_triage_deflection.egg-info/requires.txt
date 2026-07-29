@@ -2,6 +2,8 @@ langfuse-synth-core[companion] @ git+https://github.com/borismichel/langfuse-syn
 langfuse<5,>=4.0
 PyYAML<7,>=6
 requests>=2.31
+anthropic>=0.40.0
+openai>=1.40.0
 
 [dev]
 pytest<9,>=8

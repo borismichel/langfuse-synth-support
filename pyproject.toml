@@ -11,6 +11,14 @@ dependencies = [
     "langfuse>=4.0,<5",
     "PyYAML>=6,<7",
     "requests>=2.31",
+    # The companion calls `adapter.llm()`, and core's [companion] extra ships only the web
+    # stack (fastapi/uvicorn/python-multipart) — no LLM SDK. The adapter picks the provider
+    # at runtime from the environment and `usecase.yaml` declares both, so BOTH clients must
+    # be importable or the live console dies with ModuleNotFoundError on its first triage.
+    # (Same reason the lender kit declares them directly.) Seed generation stays model-free:
+    # these are companion-runtime deps, and the egress gate still proves seed never calls out.
+    "anthropic>=0.40.0",
+    "openai>=1.40.0",
 ]
 
 [project.optional-dependencies]
