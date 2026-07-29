@@ -108,15 +108,20 @@ the customer rephrases, gets a second bad answer, and gets handed off.
 ### Beat 5 — Break it live (5 min, needs the Companion)
 
 Open the **live triage console**. This is not a recording — it runs the real agent against
-a real (small) knowledge base and writes a real trace into this same project.
+a real (small) knowledge base and writes a real trace into this same project. The console
+is multi-turn: everything you type stays in **one ticket**, which is one Langfuse session.
 
 1. Ask it something ordinary: *"I was charged twice for my order, can I get a refund?"*
    Leave the index on `kb-v1`. It answers correctly. Relevance ~1.0, resolved.
-2. Change **nothing** except the index — switch to `kb-v2` — and submit the same question.
+2. Change **nothing** except the index — switch to `kb-v2` — and ask a follow-up the way a
+   real customer would: *"that didn't answer it — I was double-charged, where's my money?"*
    The search now returns the *wrong article* (a returns policy, for a billing question),
    relevance collapses, and the agent hands off.
-3. Click through to the trace. It sits in the same project as the 28 days of history, in
-   the same shape, and it was created seconds ago.
+3. Point at the ticket header: it now reads **handed off to a human**. The `deflected`
+   score is a property of the *whole ticket*, not the last message — one bad turn is enough
+   to cost you the deflection, which is exactly why the seeded curve moved.
+4. Click through to the trace, then open the **session** it belongs to. Both turns are
+   there, in order, in the same project as the 28 days of history — created seconds ago.
 
 > The lesson to land: the failure was never in the model or the prompt. It was in the
 > retrieval step, and it was only ever visible to someone who could see inside the trace.

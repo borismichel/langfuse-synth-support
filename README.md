@@ -36,7 +36,7 @@ case comes straight off the cost and deflection curves.
 | **Scores** | `retrieval_relevance` (NUMERIC, on the retriever observation), `groundedness` and `resolution` (NUMERIC / CATEGORICAL, on the trace), `user_feedback` (BOOLEAN, sparse and skewed negative), and `deflected` (BOOLEAN, on the **session** — the headline metric). |
 | **Cost** | Ingested per generation with mutually exclusive usage buckets, split across a cheap classifier and an expensive drafter, so the spend increase attributes to the right step. |
 | **Runbook** | `DEMO_SCRIPT.md` — a six-beat presenter script with the numbers, the questions you will get, and the reset. |
-| **Companion** | A live triage console: ask a real question, flip the index between `kb-v1` and `kb-v2`, and watch the same failure happen — emitting a real trace into the same project. |
+| **Companion** | A live, **multi-turn** triage console: hold a conversation with the agent, flip the index between `kb-v1` and `kb-v2` mid-ticket, and watch the same failure happen. One ticket = one Langfuse session; every message is its own trace, and the ticket counts as deflected only if no turn needed a human. |
 
 ### Langfuse features on show
 
