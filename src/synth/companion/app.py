@@ -44,7 +44,7 @@ from ..kb import INDEX_VERSIONS, Hit, search
 from ..materialize import RELEVANCE_ESCALATION_FLOOR
 
 # Kept in step with the `live_components` entry in usecase.yaml. HEALTH_PATH is the
-# Adapter's readiness route and MUST differ from `/`.
+# Adapter's readiness route and MUST differ from `/` (CONTRACT.md §"The live surface").
 HEALTH_PATH = "/healthz"
 REQUIRES_SECRETS = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LLM_API_KEY")
 

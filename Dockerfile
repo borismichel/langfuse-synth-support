@@ -24,10 +24,12 @@ COPY . .
 RUN pip install --no-cache-dir .
 
 # Runtime write paths, owned by the job uid before the drop: /app/out (artifact
-# collection — contract) and /app/.synth_spool (the reference seed's spool). COPY
-# lands root-owned and job containers run as JOB_RUN_USER=10001:10001, so without
-# this line seed dies on open_spool() at its first deployment (portal #189).
+# collection) and /app/.synth_spool (the spool) — CONTRACT.md §"Filesystem
+# conventions". COPY lands root-owned and job containers run as
+# JOB_RUN_USER=10001:10001, so without this line seed dies on open_spool() at its
+# first deployment (portal #189).
 RUN mkdir -p /app/out /app/.synth_spool && chown -R synth:synth /app
 
 USER synth
-# The portal supplies `synth <verb> --config {config}` at container-create time.
+# No default CMD: the portal supplies the command at container-create time
+# (CONTRACT.md §"The container invocation").
