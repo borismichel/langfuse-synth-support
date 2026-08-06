@@ -21,10 +21,9 @@ from langfuse_synth_core.derivation import identity_derivation
 class Target:
     """The Langfuse instance a run points at (the library reads `base_url`).
 
-    `host` is the committed default and `LANGFUSE_BASE_URL` overrides it — that override is
-    how the portal retargets ONE shipped config at whatever Langfuse a deployment points to.
-    Without it this kit dialled its own loopback on every deployment (portal #187);
-    `tests/test_retargeting.py` gates against a regression.
+    `host` is the committed default and `LANGFUSE_BASE_URL` overrides it — the retargeting
+    rule of CONTRACT.md §"Retargeting". Without it this kit dialled its own loopback on
+    every deployment (portal #187); `tests/test_retargeting.py` gates against a regression.
     """
 
     host: str = "http://localhost:3000"

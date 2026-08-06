@@ -1,10 +1,12 @@
 """The kit's `synth` runtime CLI (walking skeleton).
 
 Registers the pipeline verbs the manifest wires — `seed` and `verify` — each running
-through the shared library. The portal invokes `synth <verb> --config {config}` and
-appends `--set dotted.key=value` overrides; both are handled here. A step id that is a
-reserved verb (seed/verify/...) must run `synth <that verb>` — the manifest keeps that
-contract, so grow new verbs here and in `usecase.yaml` together.
+through the shared library. The invocation these verbs answer is the Contract's:
+`synth <verb> --config {config}`, with `--set dotted.key=value` overrides appended on
+pipeline steps only (CONTRACT.md §"The container invocation" — live and resume commands
+never receive `--set`). A step id that is a reserved verb (seed/verify/...) must run
+`synth <that verb>` — the manifest keeps that contract, so grow new verbs here and in
+`usecase.yaml` together.
 """
 from __future__ import annotations
 
@@ -55,9 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     # `synth companion` is the live surface (Spec G): the Adapter's fixed
-    # --config/--host/--port invocation, never a pipeline --set, so it skips the
-    # seed/verify argparse and dispatches to the companion app (which parses via the
-    # Adapter's parse_invocation helper).
+    # --config/--host/--port invocation, never a pipeline --set (CONTRACT.md §"The
+    # container invocation"), so it skips the seed/verify argparse and dispatches to
+    # the companion app (which parses via the Adapter's parse_invocation helper).
     _argv = sys.argv[1:] if argv is None else argv
     if _argv[:1] == ["companion"]:
         from .companion.app import main as companion_main
