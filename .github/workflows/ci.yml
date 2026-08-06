@@ -32,3 +32,8 @@ jobs:
         run: pip install -e '.[dev]'
       - name: Test (determinism golden + manifest validate + unit suite)
         run: pytest -q
+      # The Contract as executable checks (portal #198). Enforcing, not --advisory:
+      # this kit was born in the target shape, so a violation here is a regression,
+      # never migration debt.
+      - name: Contract conformance (synth-authoring conformance)
+        run: synth-authoring conformance .
