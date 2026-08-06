@@ -3,7 +3,9 @@
 # or policy change on its next pin bump — see
 # https://github.com/borismichel/langfuse-synth-core/blob/main/docs/CI_SIGNING.md
 #
-# Cut a release: tag this repo `vX.Y.Z` and push the tag.
+# Cut a release: bump `version` in pyproject.toml to `X.Y.Z` on main, then tag that
+# commit `vX.Y.Z` and push the tag. The shared workflow fails fast if the tag and the
+# pyproject version disagree — the tag IS the version the published image reports.
 
 name: Publish
 
@@ -18,7 +20,7 @@ concurrency:
 
 jobs:
   publish:
-    uses: borismichel/langfuse-synth-core/.github/workflows/kit-publish.yml@v1.9.0
+    uses: borismichel/langfuse-synth-core/.github/workflows/kit-publish.yml@v1.10.0
     permissions:
       contents: read
       packages: write
