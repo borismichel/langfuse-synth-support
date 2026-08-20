@@ -72,7 +72,8 @@ def _install_seeded_env(monkeypatch, *, generation: str, post_relevance: float =
     generations = [{"id": "o1", "traceId": "t1", "type": "GENERATION", "name": "draft-reply",
                     "startTime": POST_TS}]
 
-    def handler(method, url, *, params=None, auth=None, timeout=30, throttle_s=0.0):
+    def handler(method, url, *, params=None, auth=None, timeout=30, throttle_s=0.0,
+                attempts=8):
         params = params or {}
         path = url.replace("http://localhost:3000", "")
 
