@@ -49,8 +49,12 @@ def test_full_payload_golden_is_byte_identical():
 
 
 def test_golden_is_full_payload_not_ids_and_summary():
-    """The blessed oracle is the whole Spool — traces, generations, and scores."""
+    """The blessed oracle is the whole Spool — OTLP spans (typed, generations included)
+    plus the score envelopes that stay on legacy ingestion (portal #210)."""
     blob = GOLDEN_PATH.read_bytes()
-    assert b'"type":"trace-create"' in blob
-    assert b'"type":"generation-create"' in blob
+    assert b'"spanId"' in blob
+    assert b'"langfuse.observation.type"' in blob
+    assert b'"langfuse.observation.model.name"' in blob
     assert b'"type":"score-create"' in blob
+    # The batch trace envelope is gone — the trace shell rides the minted root span.
+    assert b'"type":"trace-create"' not in blob

@@ -17,9 +17,9 @@ Langfuse data-model choices (made against current docs, not memory):
   replay a whole conversation, and carry the headline `deflected` outcome as a
   *session-level* score — the documented use for "evaluation across multiple interactions".
 * **Observation types** use the agent-graph vocabulary (`AGENT` / `RETRIEVER` / `TOOL`)
-  via the library's `observation_event`. Batch ingestion still only accepts
-  SPAN|GENERATION|EVENT, so the library degrades these to spans carrying
-  `metadata.observation_type` — structure and filterability survive.
+  via the library's `observation_event`. On the OTLP wire (portal #210) these land as
+  their real types — the agent graph shows up natively in Langfuse instead of degraded
+  spans carrying `metadata.observation_type`.
 * **Usage details are mutually exclusive buckets** per the token-tracking contract:
   `input` *excludes* `input_cached_tokens`. Overlapping buckets double-count cost.
 * **Score data types** follow the scores data model: NUMERIC carries a number, CATEGORICAL

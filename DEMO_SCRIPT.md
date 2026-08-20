@@ -71,15 +71,14 @@ support-triage-turn
    └─ escalate-to-human    [tool]       — WARNING: below confidence floor
 ```
 
-**A presenter's note on those labels.** Langfuse's agent-graph types (`AGENT`, `RETRIEVER`,
-`TOOL`) are set over OTLP; the batch ingestion API used for backdating accepts only
-SPAN / GENERATION / EVENT. So the bracketed steps above arrive as **spans** and carry their
-intended type in `metadata.observation_type` — named, nested, and filterable, just without a
-native type badge in the UI. Don't promise a badge you are about to not show.
+**A presenter's note on those labels.** Since the OTLP cutover (portal #210) the
+bracketed steps land as **native** Langfuse agent-graph types — `AGENT`, `RETRIEVER`,
+`TOOL` — with their type badge in the UI. Point at the badges: the agent graph is now
+something Langfuse *shows*, not something the presenter narrates from metadata.
 
 The `retrieval_relevance` score sits on the **retriever observation**, not on the trace —
 so the number is attached to the step that produced it. Open that span's metadata and show
-both `observation_type: retriever` and `kb_index_version: kb-v2`.
+`kb_index_version: kb-v2` next to the RETRIEVER badge.
 
 Now open a `kb-v1` trace beside it: one retrieval round, `top_score` around 0.85, no
 handoff. Same agent, same prompt, same model. The only difference is the index.
