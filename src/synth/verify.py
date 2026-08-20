@@ -52,9 +52,13 @@ class VerifyReport:
 
 def run_verify(cfg: Config, *, log=print) -> VerifyReport:
     """Query the target project back and report each scenario check pass/fail."""
-    profile = TargetProfile.detect(cfg.target.base_url).resolved()
+    # `try_resolve`, not `resolved`: bad keys or a wrong host must come back as failed
+    # checks with the reason on each line, which is what this report is for — not as a
+    # traceback in place of it (portal #211).
+    profile, unreadable = TargetProfile.detect(cfg.target.base_url).try_resolve()
     reader = profile.reader()
-    log(f"· verifying against {profile.label} ({profile.base_url})")
+    log(f"· verifying against {profile.label} ({profile.base_url})"
+        + (f" — cannot read it: {unreadable}" if unreadable else ""))
     report = VerifyReport()
 
     # --- the data landed at all ---------------------------------------------------------

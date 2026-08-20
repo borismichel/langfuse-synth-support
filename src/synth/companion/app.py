@@ -132,13 +132,18 @@ def _run_triage(adapter: CompanionAdapter, question: str, index_version: str,
     session_id = ticket.session_id
     turn_no = len(ticket.turns) + 1
 
+    def trace_metadata(intent: str | None) -> dict:
+        """The trace's correlating metadata. `intent` is the only part that is not known
+        when the trace opens — the classifier that produces it runs inside."""
+        return {"intent": intent, "channel": "companion", "turn": turn_no,
+                "kb_index_version": index_version,
+                "post_reindex": index_version == "kb-v2"}
+
     with emitter.trace(
             "support-triage-turn", user_id="companion-console", session_id=session_id,
             tags=["support", "triage", "live", index_version],
             input={"ticket": session_id, "question": question},
-            metadata={"intent": None, "channel": "companion", "turn": turn_no,
-                      "kb_index_version": index_version,
-                      "post_reindex": index_version == "kb-v2"}) as trace:
+            metadata=trace_metadata(None)) as trace:
         trace_id = trace.id
         with trace.observation(
                 "triage-agent", as_type="agent",
@@ -224,10 +229,9 @@ def _run_triage(adapter: CompanionAdapter, question: str, index_version: str,
             agent.update(output={"escalated": escalate, "retrieval_rounds": 1},
                          input={"question": question, "intent": intent, "turn": turn_no})
 
-        trace.update(output={"escalated": escalate},
-                     metadata={"intent": intent, "channel": "companion", "turn": turn_no,
-                               "kb_index_version": index_version,
-                               "post_reindex": index_version == "kb-v2"})
+        # The trace's own metadata is re-stated with the intent filled in: the classifier
+        # runs *inside* the trace, so the intent does not exist when it is opened.
+        trace.update(output={"escalated": escalate}, metadata=trace_metadata(intent))
 
         trace.score("groundedness", round(best, 6), data_type="NUMERIC",
                     score_id=rng.score_id("groundedness"),
