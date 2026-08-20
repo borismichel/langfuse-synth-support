@@ -38,8 +38,8 @@ config_schema:
       minimum: 0
       title: Generation seed
       description: Deterministic RNG seed for the whole dataset. Vary it to mint a
-        distinct trace/id set per deployment; the same seed re-seeds idempotently
-        (upsert).
+        distinct trace/id set per deployment; the same seed regenerates the identical
+        Spool bytes (importing them twice is refused — OTLP appends, it does not upsert).
     generation.target_traces:
       type: integer
       minimum: 1

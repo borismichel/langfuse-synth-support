@@ -1,22 +1,40 @@
 """`synth seed` runtime path — materialize the Spool, then ingest it through the library.
 
-Two-phase, library-owned: spool every event to disk first, then batch-import in chunks
+Two-phase, library-owned: spool every wire object to disk first, then upload it in chunks
 (`langfuse_synth_core.seed.ingest.Ingestor`). Network never runs interleaved with
-generation, so a wedged upload can't lose the deterministic data — re-run to resume
-(idempotent upsert on the deterministic ids). Generation is model-free (see
-`synth.materialize`), so a re-seed is safe and the determinism gate can prove it offline.
+generation, so a wedged upload can't lose the deterministic data. Generation is model-free
+(see `synth.materialize`), so the determinism gate can prove the Spool offline.
+
+**This kit writes its Spool on the OTLP write path** — Langfuse platform v4's transport,
+which the one `set_spool_write_path` line below pins (core `docs/WRITE_PATHS.md`; Langfuse
+Cloud goes v4-only on 2026-11-16; the cutover is portal #210). Two consequences:
+
+* The Spool is a stream of OTLP spans, not ingestion envelopes. Nothing in
+  `synth.materialize` changes for that — the library's event builders keep their names and
+  arguments and core owns the wire format.
+* **OTLP appends; it does not upsert.** Re-running an import over a partly uploaded Spool
+  duplicates observations, so `import-spool` is non-resumable: it fails loudly instead, and
+  recovery is to clear the deployment's Langfuse data and import from the top. Determinism
+  of the *file* is untouched — that is what the golden gate proves.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 from langfuse_synth_core.seed.ingest import Ingestor, assert_demo_project
+from langfuse_synth_core.seed.writepath import OTLP, set_spool_write_path
 
 from .artifacts import publish_runbook
 from .config import Config
 from .materialize import build_events
 
 DEFAULT_SPOOL = Path(".synth_spool") / "events.ndjson"
+
+# The kit's write path, pinned in code rather than left to the environment (core
+# `docs/WRITE_PATHS.md`): flipped by portal #210, reverted by reverting this line. At
+# module level because the pin has to be in force before ANY event builder runs, whichever
+# entrypoint builds them (`seed`, the golden-gate adapter, the companion's read surface).
+set_spool_write_path(OTLP)
 
 
 def run_seed(

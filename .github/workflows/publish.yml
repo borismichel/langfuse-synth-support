@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   publish:
-    uses: borismichel/langfuse-synth-core/.github/workflows/kit-publish.yml@v2.0.0
+    uses: borismichel/langfuse-synth-core/.github/workflows/kit-publish.yml@v2.1.0
     permissions:
       contents: read
       packages: write

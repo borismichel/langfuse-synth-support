@@ -76,14 +76,19 @@ class _FakeAdapter:
     def scores(self, name: str) -> list[dict]:
         return [
             e["body"] for e in self.emitted
-            if e["type"] == "score-create" and e["body"]["name"] == name
+            if e.get("type") == "score-create" and e["body"]["name"] == name
         ]
 
     def envelopes(self, name: str) -> list[str]:
         return [
             e["id"] for e in self.emitted
-            if e["type"] == "score-create" and e["body"]["name"] == name
+            if e.get("type") == "score-create" and e["body"]["name"] == name
         ]
+
+    def spans(self) -> list[dict]:
+        """The OTLP spans in emission order — everything but the score envelopes, since
+        the console emits on the OTLP wire (portal #210)."""
+        return [e for e in self.emitted if "spanId" in e]
 
     @property
     def draft_calls(self) -> list[dict]:
@@ -136,28 +141,41 @@ def test_healthy_index_resolves_and_broken_index_escalates(client_and_adapter):
     assert "Escalated to a human" in bad.text
 
 
+def _attrs(span: dict) -> dict:
+    """A span's attributes as a plain mapping, unwrapping OTLP AnyValue."""
+    out = {}
+    for a in span["attributes"]:
+        v = a["value"]
+        if "arrayValue" in v:
+            out[a["key"]] = [i["stringValue"] for i in v["arrayValue"]["values"]]
+        else:
+            out[a["key"]] = v.get("stringValue", v.get("intValue"))
+    return out
+
+
 def test_emitted_trace_matches_the_seeded_shape(client_and_adapter):
     client, adapter = client_and_adapter
     _post(client, index_version="kb-v1")
 
-    by_type: dict[str, list[dict]] = {}
-    for ev in adapter.emitted:
-        by_type.setdefault(ev["type"], []).append(ev["body"])
+    spans = adapter.spans()
 
-    assert len(by_type["trace-create"]) == 1
-    trace = by_type["trace-create"][0]
-    assert trace["name"] == "support-triage-turn"
-    assert trace["sessionId"] == "LIVE-TEST"
-    assert trace["metadata"]["turn"] == 1
-    assert "live" in trace["tags"]
+    # The trace shell is the minted root span on the OTLP wire — no trace-create envelope.
+    roots = [s for s in spans if s["name"] == "support-triage-turn"]
+    assert len(roots) == 1
+    root = _attrs(roots[0])
+    assert root["langfuse.session.id"] == "LIVE-TEST"
+    assert int(root["langfuse.trace.metadata.turn"]) == 1
+    assert "live" in root["langfuse.trace.tags"]
 
-    # Same observation vocabulary as the seeded pool (rich types degrade to spans).
-    names = {b["name"] for b in by_type["generation-create"]}
-    assert names == {"classify-intent", "draft-reply"}
-    span_types = {b["metadata"]["observation_type"] for b in by_type["span-create"]}
-    assert {"agent", "retriever"} <= span_types
+    # Same observation vocabulary as the seeded pool, native on the wire.
+    by_type: dict[str, set[str]] = {}
+    for s in spans:
+        by_type.setdefault(_attrs(s)["langfuse.observation.type"], set()).add(s["name"])
+    assert by_type.get("generation") == {"classify-intent", "draft-reply"}
+    assert "agent" in by_type and "retriever" in by_type
 
-    scores = {b["name"]: b for b in by_type["score-create"]}
+    scores = {b["name"]: b for e in adapter.emitted if e.get("type") == "score-create"
+              for b in [e["body"]]}
     assert {"retrieval_relevance", "groundedness", "resolution", "deflected"} <= set(scores)
     # The retrieval score belongs to the retriever observation, not the trace.
     assert scores["retrieval_relevance"].get("observationId")
@@ -170,11 +188,11 @@ def test_escalation_emits_the_handoff_tool_and_flips_deflection(client_and_adapt
     client, adapter = client_and_adapter
     _post(client, index_version="kb-v2")
 
-    spans = [e["body"] for e in adapter.emitted if e["type"] == "span-create"]
-    handoff = [s for s in spans if s["name"] == "escalate-to-human"]
+    handoff = [s for s in adapter.spans() if s["name"] == "escalate-to-human"]
     assert len(handoff) == 1
-    assert handoff[0]["metadata"]["observation_type"] == "tool"
-    assert handoff[0]["level"] == "WARNING"
+    attrs = _attrs(handoff[0])
+    assert attrs["langfuse.observation.type"] == "tool"
+    assert attrs["langfuse.observation.level"] == "WARNING"
 
     assert adapter.scores("deflected")[0]["value"] == 0
 
@@ -219,8 +237,8 @@ def test_turn_numbers_increment_within_a_session(client_and_adapter):
     _post(client, question="still broken", session_id="LIVE-CHAT")
 
     turns = [
-        e["body"]["metadata"]["turn"]
-        for e in adapter.emitted if e["type"] == "trace-create"
+        int(_attrs(s)["langfuse.trace.metadata.turn"])
+        for s in adapter.spans() if s["name"] == "support-triage-turn"
     ]
     assert turns == [1, 2]
 

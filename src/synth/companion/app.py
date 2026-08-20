@@ -39,9 +39,16 @@ from langfuse_synth_core.seed.events import (
     score_event,
     trace_event,
 )
+from langfuse_synth_core.seed.writepath import OTLP, set_spool_write_path
 
 from ..kb import INDEX_VERSIONS, Hit, search
 from ..materialize import RELEVANCE_ESCALATION_FLOOR
+
+# The console emits on the same wire the Spool is written on (portal #210): this process
+# never imports `synth.seed`, so it pins the OTLP path itself. Without the pin the builders
+# would fall back to batch envelopes — and with rich observation types on the wire, legacy
+# batch ingestion rejects typed observation bodies outright.
+set_spool_write_path(OTLP)
 
 # Kept in step with the `live_components` entry in usecase.yaml. HEALTH_PATH is the
 # Adapter's readiness route and MUST differ from `/` (CONTRACT.md §"The live surface").
