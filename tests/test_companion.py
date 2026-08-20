@@ -13,6 +13,7 @@ the model, and the ticket's `deflected` outcome spans every turn under one stabl
 from __future__ import annotations
 
 import importlib.util
+from contextlib import contextmanager
 
 import pytest
 
@@ -42,15 +43,57 @@ class _StubLLM:
         return ChatResult(text, 120, 20)
 
 
-class _StubIngestor:
-    def __init__(self, sink: list[dict]) -> None:
-        self._sink = sink
+class _RecordingSpan:
+    """One observation the seam opened, with the fields it was given."""
 
-    def extend(self, events) -> None:
-        self._sink.extend(events)
+    def __init__(self, recorder, kw, parent=None):
+        self.recorder = recorder
+        self.kw = dict(kw)
+        self.parent = parent
+        self.trace_id = "trace-live"
+        self.id = f"obs-{len(recorder.spans)}"
+        recorder.spans.append(self)
 
-    def flush(self) -> None:  # nothing to send — the sink IS the assertion surface
-        pass
+    @property
+    def name(self):
+        return self.kw.get("name")
+
+    @property
+    def as_type(self):
+        return str(self.kw.get("as_type", "span")).lower()
+
+    def update(self, **kw):
+        self.kw.update(kw)
+        return self
+
+    @contextmanager
+    def start_as_current_observation(self, **kw):
+        yield _RecordingSpan(self.recorder, kw, parent=self)
+
+
+class _RecordingClient:
+    """Stands in for the Langfuse SDK behind the live-emission seam.
+
+    The console emits through `adapter.emitter()` since the read/live-seam cutover (portal
+    #211), so the assertion surface is the observations and scores the seam opened rather
+    than the Spool envelopes it used to build.
+    """
+
+    def __init__(self) -> None:
+        self.spans: list[_RecordingSpan] = []
+        self.scores: list[dict] = []
+        self.propagated: list[dict] = []
+        self.flushes = 0
+
+    @contextmanager
+    def start_as_current_observation(self, **kw):
+        yield _RecordingSpan(self, kw, parent=None)
+
+    def create_score(self, **kw):
+        self.scores.append(kw)
+
+    def flush(self):
+        self.flushes += 1
 
 
 class _FakeAdapter:
@@ -59,36 +102,46 @@ class _FakeAdapter:
     base_url = "http://langfuse.test"
 
     def __init__(self) -> None:
-        self.emitted: list[dict] = []
+        self.recorder = _RecordingClient()
         self.llm_calls: list[dict] = []
 
     def llm(self, model=None):
         return _StubLLM(self.llm_calls)
 
-    def ingestor(self, **kw):
-        return _StubIngestor(self.emitted)
+    def emitter(self, **kw):
+        from langfuse_synth_core.live.emit import LiveEmitter
+
+        @contextmanager
+        def _propagate(**attrs):
+            self.recorder.propagated.append(attrs)
+            yield
+
+        return LiveEmitter(self.base_url, public_key="pk", secret_key="sk",
+                           client=self.recorder, propagate=_propagate, **kw)
 
     def read_json(self, path, params=None, *, throttle=0.0):
         raise RuntimeError("no Langfuse in tests — the page must fall back to the trace id")
 
     # -- assertion helpers ---------------------------------------------------------------
 
+    @property
+    def emitted(self) -> list:
+        """Anything at all reached Langfuse — used by the "nothing was emitted" checks."""
+        return self.recorder.spans + self.recorder.scores
+
     def scores(self, name: str) -> list[dict]:
-        return [
-            e["body"] for e in self.emitted
-            if e.get("type") == "score-create" and e["body"]["name"] == name
-        ]
+        return [s for s in self.recorder.scores if s["name"] == name]
 
     def envelopes(self, name: str) -> list[str]:
-        return [
-            e["id"] for e in self.emitted
-            if e.get("type") == "score-create" and e["body"]["name"] == name
-        ]
+        return [s["score_id"] for s in self.scores(name)]
 
-    def spans(self) -> list[dict]:
-        """The OTLP spans in emission order — everything but the score envelopes, since
-        the console emits on the OTLP wire (portal #210)."""
-        return [e for e in self.emitted if "spanId" in e]
+    def spans(self) -> list[_RecordingSpan]:
+        """The observations in emission order."""
+        return list(self.recorder.spans)
+
+    def traces(self) -> list[dict]:
+        """The trace-level attributes propagated across each trace, in order."""
+        return list(self.recorder.propagated)
 
     @property
     def draft_calls(self) -> list[dict]:
@@ -141,58 +194,54 @@ def test_healthy_index_resolves_and_broken_index_escalates(client_and_adapter):
     assert "Escalated to a human" in bad.text
 
 
-def _attrs(span: dict) -> dict:
-    """A span's attributes as a plain mapping, unwrapping OTLP AnyValue."""
-    out = {}
-    for a in span["attributes"]:
-        v = a["value"]
-        if "arrayValue" in v:
-            out[a["key"]] = [i["stringValue"] for i in v["arrayValue"]["values"]]
-        else:
-            out[a["key"]] = v.get("stringValue", v.get("intValue"))
-    return out
-
-
 def test_emitted_trace_matches_the_seeded_shape(client_and_adapter):
     client, adapter = client_and_adapter
     _post(client, index_version="kb-v1")
 
     spans = adapter.spans()
 
-    # The trace shell is the minted root span on the OTLP wire — no trace-create envelope.
-    roots = [s for s in spans if s["name"] == "support-triage-turn"]
+    # Under v4 there is no trace entity: the trace is its root observation, and its
+    # correlating attributes are propagated across everything nested inside it.
+    roots = [s for s in spans if s.name == "support-triage-turn"]
     assert len(roots) == 1
-    root = _attrs(roots[0])
-    assert root["langfuse.session.id"] == "LIVE-TEST"
-    assert int(root["langfuse.trace.metadata.turn"]) == 1
-    assert "live" in root["langfuse.trace.tags"]
+    trace_attrs = adapter.traces()[0]
+    assert trace_attrs["session_id"] == "LIVE-TEST"
+    assert trace_attrs["metadata"]["turn"] == 1
+    assert "live" in trace_attrs["tags"]
 
-    # Same observation vocabulary as the seeded pool, native on the wire.
+    # Same observation vocabulary as the seeded pool.
     by_type: dict[str, set[str]] = {}
-    for s in spans:
-        by_type.setdefault(_attrs(s)["langfuse.observation.type"], set()).add(s["name"])
+    for s in spans[1:]:
+        by_type.setdefault(s.as_type, set()).add(s.name)
     assert by_type.get("generation") == {"classify-intent", "draft-reply"}
     assert "agent" in by_type and "retriever" in by_type
 
-    scores = {b["name"]: b for e in adapter.emitted if e.get("type") == "score-create"
-              for b in [e["body"]]}
+    scores = {s["name"]: s for s in adapter.recorder.scores}
     assert {"retrieval_relevance", "groundedness", "resolution", "deflected"} <= set(scores)
     # The retrieval score belongs to the retriever observation, not the trace.
-    assert scores["retrieval_relevance"].get("observationId")
+    assert scores["retrieval_relevance"].get("observation_id")
     # The headline metric is session-scoped, per the scores data model.
-    assert scores["deflected"]["sessionId"] == "LIVE-TEST"
+    assert scores["deflected"]["session_id"] == "LIVE-TEST"
     assert scores["deflected"]["value"] == 1
+
+
+def test_the_turn_is_delivered_before_the_console_answers(client_and_adapter):
+    """The page hands the user a deep link the moment it renders, so the trace has to be on
+    its way by then — the seam flushes when the trace block ends, and the session score is
+    flushed behind it."""
+    client, adapter = client_and_adapter
+    _post(client)
+    assert adapter.recorder.flushes >= 1
 
 
 def test_escalation_emits_the_handoff_tool_and_flips_deflection(client_and_adapter):
     client, adapter = client_and_adapter
     _post(client, index_version="kb-v2")
 
-    handoff = [s for s in adapter.spans() if s["name"] == "escalate-to-human"]
+    handoff = [s for s in adapter.spans() if s.name == "escalate-to-human"]
     assert len(handoff) == 1
-    attrs = _attrs(handoff[0])
-    assert attrs["langfuse.observation.type"] == "tool"
-    assert attrs["langfuse.observation.level"] == "WARNING"
+    assert handoff[0].as_type == "tool"
+    assert handoff[0].kw["level"] == "WARNING"
 
     assert adapter.scores("deflected")[0]["value"] == 0
 
@@ -236,11 +285,7 @@ def test_turn_numbers_increment_within_a_session(client_and_adapter):
     _post(client, session_id="LIVE-CHAT")
     _post(client, question="still broken", session_id="LIVE-CHAT")
 
-    turns = [
-        int(_attrs(s)["langfuse.trace.metadata.turn"])
-        for s in adapter.spans() if s["name"] == "support-triage-turn"
-    ]
-    assert turns == [1, 2]
+    assert [t["metadata"]["turn"] for t in adapter.traces()] == [1, 2]
 
 
 def test_one_bad_turn_makes_the_whole_ticket_undeflected(client_and_adapter):
@@ -265,10 +310,9 @@ def test_session_score_keeps_one_stable_id_across_turns(client_and_adapter):
     _post(client, session_id="LIVE-CHAT")
     _post(client, question="still broken", session_id="LIVE-CHAT")
 
-    ids = {s["id"] for s in adapter.scores("deflected")}
     envelope_ids = set(adapter.envelopes("deflected"))
     assert len(adapter.scores("deflected")) == 2  # emitted once per turn
-    assert len(ids) == 1 and len(envelope_ids) == 1  # ...but always the same score
+    assert len(envelope_ids) == 1                 # ...but always the same score
 
 
 def test_sessions_do_not_share_history(client_and_adapter):
@@ -279,7 +323,7 @@ def test_sessions_do_not_share_history(client_and_adapter):
 
     # The second ticket starts clean — no replay of the first.
     assert len(adapter.draft_calls[1]["messages"]) == 1
-    assert {s["sessionId"] for s in adapter.scores("deflected")} == {"LIVE-A", "LIVE-B"}
+    assert {s["session_id"] for s in adapter.scores("deflected")} == {"LIVE-A", "LIVE-B"}
 
 
 def test_new_ticket_link_starts_a_fresh_session(client_and_adapter):

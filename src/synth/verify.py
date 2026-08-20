@@ -1,24 +1,27 @@
-"""`synth verify` — read the data back through the library and assert it landed.
+"""`synth verify` — read the data back through the seam and assert it landed.
 
-The read-client (auth + paginated GETs of the Langfuse public REST API) is the library's
-(`langfuse_synth_core.lfread`); what stays HERE is the scenario talking — which assertions
-to make about what landed.
+The read seam (`langfuse_synth_core.read`) is the read-client: it owns the Langfuse API
+endpoints, follows their pagination to the end, and normalises what comes back, so this file
+reads the same rows whichever API generation the target serves (portal #211). What stays
+HERE is the scenario talking — which assertions to make about what landed.
 
 This kit's `verify` is the **sole scenario oracle** at admission, so it asserts the *story*,
 not just row counts: the retrieval regression must be visible across the re-index boundary,
 tickets must be grouped into sessions, and both resolution outcomes must be present. A kit
 that seeds rows but no longer tells the story fails here.
 
-Note on sampling: score reads follow pagination up to the library's page cap, so at large
-`target_traces` the distribution checks run on a large sample rather than the full pool.
-That is sufficient for a verdict — the effect being asserted is a ~0.28 shift in the mean.
+Note on sampling: `reader.traces()` is a **sample** and never a project total — under v4
+there is no trace list to count, and the seam refuses to pretend otherwise. Score reads
+follow pagination to the seam's page cap, so at large `target_traces` the distribution
+checks run on a large sample rather than the full pool. That is sufficient for a verdict:
+the effect being asserted is a ~0.28 shift in the mean.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from statistics import mean
 
-from langfuse_synth_core.lfread import get_all_scores, get_json, parse_ts
+from langfuse_synth_core.target import TargetProfile
 
 from .config import Config
 from .materialize import REINDEX_AT, RELEVANCE_ESCALATION_FLOOR
@@ -47,40 +50,37 @@ class VerifyReport:
         return all(c.ok for c in self.checks)
 
 
-def _total_items(payload: dict) -> int:
-    total = payload.get("meta", {}).get("totalItems")
-    return len(payload.get("data", [])) if total is None else int(total)
-
-
 def run_verify(cfg: Config, *, log=print) -> VerifyReport:
     """Query the target project back and report each scenario check pass/fail."""
-    base = cfg.target.base_url
+    profile = TargetProfile.detect(cfg.target.base_url).resolved()
+    reader = profile.reader()
+    log(f"· verifying against {profile.label} ({profile.base_url})")
     report = VerifyReport()
 
     # --- the data landed at all ---------------------------------------------------------
-    traces = get_json(base, "/api/public/traces", {"limit": 100})
-    total = _total_items(traces)
-    report.add("traces_present", total > 0, f"{total} trace(s) visible")
+    traces = reader.traces(limit=100)
+    report.add("traces_present", len(traces) > 0, f"{len(traces)} trace(s) sampled")
 
     # --- tickets are grouped into sessions ----------------------------------------------
-    sampled = traces.get("data", [])
-    sessions = {t.get("sessionId") for t in sampled if t.get("sessionId")}
+    sessions = {t.session_id for t in traces if t.session_id}
     report.add(
         "sessions_grouped",
-        len(sessions) > 0 and len(sessions) <= len(sampled),
-        f"{len(sessions)} session(s) across {len(sampled)} sampled trace(s)",
+        len(sessions) > 0 and len(sessions) <= len(traces),
+        f"{len(sessions)} session(s) across {len(traces)} sampled trace(s)",
     )
 
     # --- the regression is visible across the re-index boundary --------------------------
-    relevance = get_all_scores(base, "retrieval_relevance")
+    relevance = reader.scores(name="retrieval_relevance")
     report.add(
         "retrieval_relevance_present",
         len(relevance) > 0,
         f"{len(relevance)} retrieval_relevance score(s)",
     )
 
-    pre = [s["value"] for s in relevance if parse_ts(s["timestamp"]) < REINDEX_AT]
-    post = [s["value"] for s in relevance if parse_ts(s["timestamp"]) >= REINDEX_AT]
+    pre = [s.numeric_value for s in relevance
+           if s.numeric_value is not None and s.timestamp and s.timestamp < REINDEX_AT]
+    post = [s.numeric_value for s in relevance
+            if s.numeric_value is not None and s.timestamp and s.timestamp >= REINDEX_AT]
     if pre and post:
         drop = mean(pre) - mean(post)
         report.add(
@@ -103,17 +103,19 @@ def run_verify(cfg: Config, *, log=print) -> VerifyReport:
         )
 
     # --- both outcomes are present, so the deflection story has two sides ----------------
-    resolution = get_all_scores(base, "resolution")
-    labels = {s.get("stringValue") or s.get("value") for s in resolution}
+    # `resolution` is CATEGORICAL, so the label is the value — the seam keeps it out of the
+    # numeric column rather than reporting the deprecated API's `value: 0` placeholder.
+    resolution = reader.scores(name="resolution")
+    labels = {s.string_value for s in resolution if s.string_value}
     report.add(
         "both_resolutions_present",
         {"self_served", "escalated"} <= labels,
-        f"resolution labels: {sorted(str(x) for x in labels)}",
+        f"resolution labels: {sorted(labels)}",
     )
 
     # --- the headline metric exists at the session level ---------------------------------
-    deflected = get_all_scores(base, "deflected")
-    on_sessions = [s for s in deflected if s.get("sessionId")]
+    deflected = reader.scores(name="deflected")
+    on_sessions = [s for s in deflected if s.session_id]
     report.add(
         "session_deflection_scored",
         len(on_sessions) > 0,
@@ -121,18 +123,16 @@ def run_verify(cfg: Config, *, log=print) -> VerifyReport:
     )
 
     # --- spend is attributed, so the cost curve is real ----------------------------------
-    # Field naming for computed cost has varied across Langfuse versions, so accept either
-    # the computed rollup or the ingested detail rather than pinning one key.
-    gens = get_json(base, "/api/public/observations", {"type": "GENERATION", "limit": 50})
-    costed = [
-        o
-        for o in gens.get("data", [])
-        if (o.get("calculatedTotalCost") or (o.get("costDetails") or {}).get("total") or 0) > 0
-    ]
+    # The seam rolls the two generations' cost columns onto one field (legacy's
+    # `calculatedTotalCost`, v4's `totalCost`) and keeps the ingested breakdown beside it,
+    # so this reads the same on a target that reports only one of them.
+    gens = reader.observations(type="GENERATION", limit_pages=1)
+    costed = [o for o in gens
+              if (o.total_cost or (o.cost_details or {}).get("total") or 0) > 0]
     report.add(
         "generation_cost_attributed",
         len(costed) > 0,
-        f"{len(costed)}/{len(gens.get('data', []))} sampled generation(s) carry a USD cost",
+        f"{len(costed)}/{len(gens)} sampled generation(s) carry a USD cost",
     )
 
     for check in report.checks:

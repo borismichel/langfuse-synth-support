@@ -27,28 +27,20 @@ import hashlib
 import html
 import secrets
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any
 
 from langfuse_synth_core.companion import CompanionAdapter, parse_invocation
 from langfuse_synth_core.live import paths, theme
 from langfuse_synth_core.rng import Rng
-from langfuse_synth_core.seed.events import (
-    generation_event,
-    observation_event,
-    score_event,
-    trace_event,
-)
-from langfuse_synth_core.seed.writepath import OTLP, set_spool_write_path
 
 from ..kb import INDEX_VERSIONS, Hit, search
 from ..materialize import RELEVANCE_ESCALATION_FLOOR
 
-# The console emits on the same wire the Spool is written on (portal #210): this process
-# never imports `synth.seed`, so it pins the OTLP path itself. Without the pin the builders
-# would fall back to batch envelopes — and with rich observation types on the wire, legacy
-# batch ingestion rejects typed observation bodies outright.
-set_spool_write_path(OTLP)
+# The console no longer builds Spool envelopes at all: a console turn is wall-clock and
+# calls a real model, so it emits through the live-emission seam (`adapter.emitter()`,
+# portal #211) and the Spool's write-path pin that used to sit here went with the builders.
+# The seam speaks OTLP through the Langfuse SDK, with the real-time ingestion header, so the
+# trace the console links to is readable in seconds.
 
 # Kept in step with the `live_components` entry in usecase.yaml. HEALTH_PATH is the
 # Adapter's readiness route and MUST differ from `/` (CONTRACT.md §"The live surface").
@@ -126,185 +118,138 @@ def _run_triage(adapter: CompanionAdapter, question: str, index_version: str,
 
     `ticket` carries the conversation so far: prior turns are replayed to the drafter, and
     the session-level outcome is recomputed across the whole ticket once this turn lands.
+
+    The trace goes out through the **live-emission seam** (`adapter.emitter()`), not the
+    Spool's ingestor. A console turn happens at *now* and calls a real model, so it has no
+    timestamp to supply and nothing to compare against a golden — the line CONTRACT.md draws
+    between the two writers (portal #211). One visible consequence: every step below is
+    timed by the seam as it runs, so the `datetime.now()` bookkeeping this function used to
+    carry between steps is gone.
     """
     llm = adapter.llm()
+    emitter = adapter.emitter()
     rng = Rng(secrets.randbits(63))
     session_id = ticket.session_id
     turn_no = len(ticket.turns) + 1
-    trace_id = rng.trace_id("live")
-    agent_id = rng.obs_id("agent")
-    started = datetime.now(timezone.utc)
-    events: list[dict] = []
 
-    # -- classify ------------------------------------------------------------------------
-    # Deliberately history-free: the classifier routes the message in front of it, and
-    # keeping it scoped holds this call at a few dozen tokens however long the ticket runs.
-    t0 = datetime.now(timezone.utc)
-    classify = llm.complete(
-        system=CLASSIFY_PROMPT,
-        messages=[{"role": "user", "content": question}],
-        max_tokens=8,
-    )
-    intent = classify.text.strip().lower().split()[0] if classify.text.strip() else "unknown"
-    t1 = datetime.now(timezone.utc)
-    events.append(
-        generation_event(
-            obs_id=rng.obs_id("classify"), trace_id=trace_id, parent_id=agent_id,
-            name="classify-intent", start=t0, end=t1, model=llm.model,
-            usage_details={
-                "input": classify.input_tokens,
-                "output": classify.output_tokens,
-                "total": classify.input_tokens + classify.output_tokens,
-            },
-            # Empty cost_details on purpose: this is a REAL model, so Langfuse infers USD
-            # from its own model definitions rather than trusting a number we made up.
-            cost_details={},
-            input={"message": question}, output={"intent": intent},
-        )
-    )
-
-    # -- retrieve (the step the re-index broke) -------------------------------------------
-    # Scoped to the latest message, not the whole thread: a customer rephrasing after a bad
-    # answer should get a fresh search, which is what makes the kb-v2 failure repeat.
-    t2 = datetime.now(timezone.utc)
-    hits = search(question, index_version=index_version, top_k=TOP_K)
-    t3 = datetime.now(timezone.utc)
-    best = hits[0].score if hits else 0.0
-    retrieve_id = rng.obs_id("retrieve")
-    events.append(
-        observation_event(
-            obs_id=retrieve_id, trace_id=trace_id, parent_id=agent_id, name="kb-search",
-            obs_type="RETRIEVER", start=t2, end=t3,
-            input={"query": question, "top_k": TOP_K},
-            output={
-                "chunks": len(hits),
-                "top_score": round(best, 6),
-                "articles": [h.article.id for h in hits],
-            },
-            metadata={"kb_index_version": index_version, "round": 1,
-                      "top_score": round(best, 6)},
-        )
-    )
-    events.append(
-        score_event(
-            score_id=rng.score_id("relevance"), name="retrieval_relevance",
-            value=round(best, 6), data_type="NUMERIC", timestamp=t3,
-            trace_id=trace_id, observation_id=retrieve_id,
-        )
-    )
-
-    # -- draft, with the conversation so far ----------------------------------------------
-    context = "\n\n".join(
-        f"[{h.article.id}] {h.article.title}\n{h.article.body}" for h in hits
-    ) or "(the knowledge base returned nothing)"
-    messages: list[dict] = []
-    for prior in ticket.turns[-MAX_HISTORY_TURNS:]:
-        messages.append({"role": "user", "content": prior.question})
-        messages.append({"role": "assistant", "content": prior.reply})
-    messages.append({
-        "role": "user",
-        "content": f"Knowledge-base extracts:\n{context}\n\nCustomer message:\n{question}",
-    })
-
-    t4 = datetime.now(timezone.utc)
-    draft = llm.complete(system=SYSTEM_PROMPT, messages=messages, max_tokens=320)
-    t5 = datetime.now(timezone.utc)
-    escalate = best < RELEVANCE_ESCALATION_FLOOR
-    events.append(
-        generation_event(
-            obs_id=rng.obs_id("draft"), trace_id=trace_id, parent_id=agent_id,
-            name="draft-reply", start=t4, end=t5, model=llm.model,
-            usage_details={
-                "input": draft.input_tokens,
-                "output": draft.output_tokens,
-                "total": draft.input_tokens + draft.output_tokens,
-            },
-            cost_details={},
-            input={"context_chunks": len(hits), "intent": intent,
-                   "history_turns": len(ticket.turns)},
-            output={"reply": draft.text, "escalate": escalate},
-            metadata={"context_chunks": len(hits), "kb_index_version": index_version,
-                      "history_turns": len(ticket.turns)},
-        )
-    )
-
-    # -- hand off -------------------------------------------------------------------------
-    end = datetime.now(timezone.utc)
-    if escalate:
-        events.append(
-            observation_event(
-                obs_id=rng.obs_id("escalate"), trace_id=trace_id, parent_id=agent_id,
-                name="escalate-to-human", obs_type="TOOL", start=t5, end=end,
-                input={"queue": intent, "reason": "low_confidence"},
-                output={"ticket": session_id, "queued": True},
-                level="WARNING",
-                status_message="handed off: retrieved context below confidence floor",
-            )
-        )
-
-    # -- the trace root, the enclosing agent span, and the verdict scores ------------------
-    events.insert(
-        0,
-        trace_event(
-            trace_id=trace_id, timestamp=started, name="support-triage-turn",
-            user_id="companion-console", session_id=session_id,
+    with emitter.trace(
+            "support-triage-turn", user_id="companion-console", session_id=session_id,
             tags=["support", "triage", "live", index_version],
-            metadata={"intent": intent, "channel": "companion", "turn": turn_no,
-                      "kb_index_version": index_version,
-                      "post_reindex": index_version == "kb-v2"},
             input={"ticket": session_id, "question": question},
-            output={"escalated": escalate},
-        ),
-    )
-    events.append(
-        observation_event(
-            obs_id=agent_id, trace_id=trace_id, name="triage-agent", obs_type="AGENT",
-            start=started, end=end,
-            input={"question": question, "intent": intent, "turn": turn_no},
-            output={"escalated": escalate, "retrieval_rounds": 1},
-            metadata={"kb_index_version": index_version, "retrieval_rounds": 1},
-        )
-    )
-    events.append(
-        score_event(
-            score_id=rng.score_id("groundedness"), name="groundedness",
-            value=round(best, 6), data_type="NUMERIC", timestamp=t5, trace_id=trace_id,
-            comment="live run: share of the question covered by retrieved context",
-        )
-    )
-    events.append(
-        score_event(
-            score_id=rng.score_id("resolution"), name="resolution",
-            value="escalated" if escalate else "self_served",
-            data_type="CATEGORICAL", timestamp=end, trace_id=trace_id,
-        )
-    )
+            metadata={"intent": None, "channel": "companion", "turn": turn_no,
+                      "kb_index_version": index_version,
+                      "post_reindex": index_version == "kb-v2"}) as trace:
+        trace_id = trace.id
+        with trace.observation(
+                "triage-agent", as_type="agent",
+                input={"question": question, "turn": turn_no},
+                metadata={"kb_index_version": index_version,
+                          "retrieval_rounds": 1}) as agent:
+
+            # -- classify ------------------------------------------------------------
+            # Deliberately history-free: the classifier routes the message in front of it,
+            # and keeping it scoped holds this call at a few dozen tokens however long the
+            # ticket runs.
+            with agent.generation(
+                    "classify-intent", model=llm.model, input={"message": question},
+                    # No cost: this is a REAL model, so Langfuse infers USD from its own
+                    # model definitions rather than trusting a number we made up.
+                    ) as gen:
+                classify = llm.complete(
+                    system=CLASSIFY_PROMPT,
+                    messages=[{"role": "user", "content": question}],
+                    max_tokens=8,
+                )
+                intent = (classify.text.strip().lower().split()[0]
+                          if classify.text.strip() else "unknown")
+                gen.update(output={"intent": intent},
+                           usage_details={"input": classify.input_tokens,
+                                          "output": classify.output_tokens,
+                                          "total": classify.input_tokens + classify.output_tokens})
+
+            # -- retrieve (the step the re-index broke) -------------------------------
+            # Scoped to the latest message, not the whole thread: a customer rephrasing
+            # after a bad answer should get a fresh search, which is what makes the kb-v2
+            # failure repeat.
+            with agent.observation(
+                    "kb-search", as_type="retriever",
+                    input={"query": question, "top_k": TOP_K},
+                    metadata={"kb_index_version": index_version, "round": 1}) as retrieve:
+                hits = search(question, index_version=index_version, top_k=TOP_K)
+                best = hits[0].score if hits else 0.0
+                retrieve.update(
+                    output={"chunks": len(hits), "top_score": round(best, 6),
+                            "articles": [h.article.id for h in hits]},
+                    metadata={"kb_index_version": index_version, "round": 1,
+                              "top_score": round(best, 6)})
+                retrieve.score("retrieval_relevance", round(best, 6), data_type="NUMERIC",
+                               score_id=rng.score_id("relevance"))
+
+            # -- draft, with the conversation so far ----------------------------------
+            context = "\n\n".join(
+                f"[{h.article.id}] {h.article.title}\n{h.article.body}" for h in hits
+            ) or "(the knowledge base returned nothing)"
+            messages: list[dict] = []
+            for prior in ticket.turns[-MAX_HISTORY_TURNS:]:
+                messages.append({"role": "user", "content": prior.question})
+                messages.append({"role": "assistant", "content": prior.reply})
+            messages.append({
+                "role": "user",
+                "content": f"Knowledge-base extracts:\n{context}\n\nCustomer message:\n{question}",
+            })
+
+            with agent.generation(
+                    "draft-reply", model=llm.model,
+                    input={"context_chunks": len(hits), "intent": intent,
+                           "history_turns": len(ticket.turns)},
+                    metadata={"context_chunks": len(hits), "kb_index_version": index_version,
+                              "history_turns": len(ticket.turns)}) as gen:
+                draft = llm.complete(system=SYSTEM_PROMPT, messages=messages, max_tokens=320)
+                escalate = best < RELEVANCE_ESCALATION_FLOOR
+                gen.update(output={"reply": draft.text, "escalate": escalate},
+                           usage_details={"input": draft.input_tokens,
+                                          "output": draft.output_tokens,
+                                          "total": draft.input_tokens + draft.output_tokens})
+
+            # -- hand off --------------------------------------------------------------
+            if escalate:
+                with agent.observation(
+                        "escalate-to-human", as_type="tool",
+                        input={"queue": intent, "reason": "low_confidence"},
+                        level="WARNING",
+                        status_message="handed off: retrieved context below confidence floor",
+                        ) as handoff:
+                    handoff.update(output={"ticket": session_id, "queued": True})
+
+            agent.update(output={"escalated": escalate, "retrieval_rounds": 1},
+                         input={"question": question, "intent": intent, "turn": turn_no})
+
+        trace.update(output={"escalated": escalate},
+                     metadata={"intent": intent, "channel": "companion", "turn": turn_no,
+                               "kb_index_version": index_version,
+                               "post_reindex": index_version == "kb-v2"})
+
+        trace.score("groundedness", round(best, 6), data_type="NUMERIC",
+                    score_id=rng.score_id("groundedness"),
+                    comment="live run: share of the question covered by retrieved context")
+        trace.score("resolution", "escalated" if escalate else "self_served",
+                    data_type="CATEGORICAL", score_id=rng.score_id("resolution"))
+
+    # The ticket's outcome spans every turn so far, so this score is re-emitted each turn
+    # under a stable id — it updates in place rather than accumulating one score per message.
+    escalated_so_far = ticket.escalated or escalate
+    emitter.score(
+        "deflected", 0 if escalated_so_far else 1, data_type="BOOLEAN",
+        session_id=session_id, score_id=_session_score_id(session_id, "deflected"),
+        comment=(f"live console ticket, {turn_no} turn(s): "
+                 + ("handed off to a human" if escalated_so_far else "resolved by the agent")))
+    emitter.flush()
 
     turn = Turn(
         question=question, reply=draft.text.strip(), intent=intent,
         index_version=index_version, hits=hits, best=best, escalate=escalate,
         trace_id=trace_id,
     )
-
-    # The ticket's outcome spans every turn so far, so this score is re-emitted each turn
-    # under a stable id — it updates in place rather than accumulating one score per message.
-    escalated_so_far = ticket.escalated or escalate
-    events.append(
-        score_event(
-            score_id=_session_score_id(session_id, "deflected"), name="deflected",
-            value=0 if escalated_so_far else 1, data_type="BOOLEAN", timestamp=end,
-            session_id=session_id,
-            comment=(
-                f"live console ticket, {turn_no} turn(s): "
-                + ("handed off to a human" if escalated_so_far else "resolved by the agent")
-            ),
-        )
-    )
-
-    ingestor = adapter.ingestor()
-    ingestor.extend(events)
-    ingestor.flush()
-
     ticket.turns.append(turn)
     return turn
 
