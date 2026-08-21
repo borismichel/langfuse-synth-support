@@ -154,8 +154,9 @@ reflection of reality.
 ## 5. Reset
 
 Langfuse ingestion is append-only; teardown is project-level. Delete the Langfuse project
-(or create a fresh one) and re-deploy. Re-seeding the same project is safe — generation is
-deterministic and ids are stable, so it upserts rather than duplicating.
+(or create a fresh one) and re-deploy. Do **not** re-seed a project that already holds this
+demo: generation is deterministic, but OTLP appends rather than upserting, so the story
+would be told twice. `import-spool` refuses a second run rather than doubling it.
 
 Note that live console runs are tagged `live` and land in `LIVE-*` sessions, so you can
 filter them out of the seeded pool (or find them again) with a tag filter.
