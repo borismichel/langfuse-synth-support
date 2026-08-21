@@ -102,17 +102,19 @@ def run_verify(cfg: Config, *, log=print) -> VerifyReport:
     )
 
     # The run-date proxy: the newest thing that landed, across the sampled traces and every
-    # relevance score read. The boundary is the generator's offset back from it.
+    # relevance score read. The boundary is the generator's offset back from it. Both reads
+    # come back newest-first from Langfuse, so the newest row is inside the sample even
+    # when pagination stops at the seam's page cap.
     newest = _newest_observed(
         [t.timestamp for t in traces] + [s.timestamp for s in relevance]
     )
     boundary = reindex_at(newest) if newest else None
-    pre = [s.numeric_value for s in relevance
-           if s.numeric_value is not None and s.timestamp and boundary
-           and s.timestamp < boundary]
-    post = [s.numeric_value for s in relevance
-            if s.numeric_value is not None and s.timestamp and boundary
-            and s.timestamp >= boundary]
+    pre: list[float] = []
+    post: list[float] = []
+    if boundary:
+        timed = [s for s in relevance if s.numeric_value is not None and s.timestamp]
+        pre = [s.numeric_value for s in timed if s.timestamp < boundary]
+        post = [s.numeric_value for s in timed if s.timestamp >= boundary]
     if pre and post:
         drop = mean(pre) - mean(post)
         report.add(

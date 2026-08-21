@@ -39,10 +39,14 @@ def _today() -> date:
 # parametrised tests below move it to today and to a fortnight out.
 _DEFAULT_ANCHOR = datetime.combine(_today() - timedelta(days=30), datetime.min.time(),
                                    tzinfo=timezone.utc).replace(hour=12)
-# Rows sit where the generator puts them: the healthy baseline well before the re-index,
-# the degraded tail reaching right up to the anchor (the newest thing that landed).
-PRE_TS = _iso(_DEFAULT_ANCHOR - timedelta(days=REINDEX_OFFSET_DAYS + 5))   # pre-re-index
-POST_TS = _iso(_DEFAULT_ANCHOR - timedelta(hours=1))                       # post-re-index
+
+
+def _row_stamps(anchor: datetime) -> tuple[str, str]:
+    """(pre, post) timestamps where the generator puts them: the healthy baseline well
+    before the re-index, the degraded tail reaching right up to the anchor (the newest
+    thing that landed)."""
+    return (_iso(anchor - timedelta(days=REINDEX_OFFSET_DAYS + 5)),
+            _iso(anchor - timedelta(hours=1)))
 
 
 class _Resp:
@@ -67,10 +71,7 @@ def _install_seeded_env(monkeypatch, *, post_relevance: float = 0.52,
     `anchor` is the as-of date the canned data was "seeded" on; the rows sit on either
     side of `anchor − REINDEX_OFFSET_DAYS`. `verify` is not told it.
     """
-    pre_ts, post_ts = PRE_TS, POST_TS
-    if anchor is not None:
-        pre_ts = _iso(anchor - timedelta(days=REINDEX_OFFSET_DAYS + 5))
-        post_ts = _iso(anchor - timedelta(hours=1))
+    pre_ts, post_ts = _row_stamps(anchor or _DEFAULT_ANCHOR)
 
     def score_rows(name):
         if name == "retrieval_relevance":
