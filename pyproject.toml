@@ -1,13 +1,13 @@
 [project]
 name = "support-triage-deflection"
-version = "0.3.0"
+version = "0.3.1"
 description = "Demo Depot synth kit — a runnable-green walking skeleton scaffolded by `synth-authoring new`."
 requires-python = ">=3.11"
 dependencies = [
     # The shared synthesis library (public git dependency). Pinned to a TAG — never a
     # moving branch — so this kit's vendor-approved output can't be silently rewritten by a
     # later lib change. Bump deliberately (see the lib's RELEASING.md).
-    "langfuse-synth-core[companion] @ git+https://github.com/borismichel/langfuse-synth-core@v4.0.0",
+    "langfuse-synth-core[companion] @ git+https://github.com/borismichel/langfuse-synth-core@v4.1.0",
     # The floor matches core's DELIBERATE pin (portal #211): 4.14.0 is the first SDK with a
     # client for the v4 Experiments API, and the floor is also what puts the real-time
     # ingestion header on the live-emission seam's exporter.
@@ -30,7 +30,7 @@ dev = [
     # The determinism golden gate + `synth-authoring validate/freeze` ride the [authoring]
     # extra. SAME ref as the runtime pin above — the gate and the core the kit runs against
     # must be the one, identical build. Bump both pins together, never let them drift.
-    "langfuse-synth-core[authoring] @ git+https://github.com/borismichel/langfuse-synth-core@v4.0.0",
+    "langfuse-synth-core[authoring] @ git+https://github.com/borismichel/langfuse-synth-core@v4.1.0",
 ]
 
 [project.scripts]
