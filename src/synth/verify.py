@@ -15,16 +15,30 @@ there is no trace list to count, and the seam refuses to pretend otherwise. Scor
 follow pagination to the seam's page cap, so at large `target_traces` the distribution
 checks run on a large sample rather than the full pool. That is sufficient for a verdict:
 the effect being asserted is a ~0.28 shift in the mean.
+
+**The re-index boundary is derived from the data, not told to `verify`** (portal #229).
+`seed` anchors the window on the operator's as-of date — or on the clock — and `verify`
+runs in a different container, possibly days later, so it cannot be handed that anchor.
+It must not recompute `now − offset` either (wrong whenever it is re-run against an
+existing deployment), and this kit is deliberately stateless (the only kit passing
+`synth-authoring conformance` fully enforcing), so there is no run state to read it from.
+So `verify` takes the newest observed timestamp as the run-date proxy and subtracts the
+same `REINDEX_OFFSET_DAYS` the generator used. That is also what makes the two boundary
+checks real assertions about what landed rather than a replay of `seed`'s own input.
+The proxy sits a few hours short of the true anchor (the last sample lands on its eve),
+which shifts the split by at most a day against a ten-day tail — the checks are
+statistical, so that does not move the verdict.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from statistics import mean
 
 from langfuse_synth_core.target import TargetProfile
 
 from .config import Config
-from .materialize import REINDEX_AT, RELEVANCE_ESCALATION_FLOOR
+from .materialize import REINDEX_OFFSET_DAYS, RELEVANCE_ESCALATION_FLOOR, reindex_at
 
 # The regression must clear this margin to count as "visible" — comfortably below the
 # ~0.28 the generator produces, so the check is decisive without being brittle.
@@ -48,6 +62,12 @@ class VerifyReport:
     @property
     def ok(self) -> bool:
         return all(c.ok for c in self.checks)
+
+
+def _newest_observed(stamps: list[datetime | None]) -> datetime | None:
+    """The newest timestamp among what was read — the run-date proxy."""
+    present = [ts for ts in stamps if ts is not None]
+    return max(present) if present else None
 
 
 def run_verify(cfg: Config, *, log=print) -> VerifyReport:
@@ -81,10 +101,20 @@ def run_verify(cfg: Config, *, log=print) -> VerifyReport:
         f"{len(relevance)} retrieval_relevance score(s)",
     )
 
-    pre = [s.numeric_value for s in relevance
-           if s.numeric_value is not None and s.timestamp and s.timestamp < REINDEX_AT]
-    post = [s.numeric_value for s in relevance
-            if s.numeric_value is not None and s.timestamp and s.timestamp >= REINDEX_AT]
+    # The run-date proxy: the newest thing that landed, across the sampled traces and every
+    # relevance score read. The boundary is the generator's offset back from it. Both reads
+    # come back newest-first from Langfuse, so the newest row is inside the sample even
+    # when pagination stops at the seam's page cap.
+    newest = _newest_observed(
+        [t.timestamp for t in traces] + [s.timestamp for s in relevance]
+    )
+    boundary = reindex_at(newest) if newest else None
+    pre: list[float] = []
+    post: list[float] = []
+    if boundary:
+        timed = [s for s in relevance if s.numeric_value is not None and s.timestamp]
+        pre = [s.numeric_value for s in timed if s.timestamp < boundary]
+        post = [s.numeric_value for s in timed if s.timestamp >= boundary]
     if pre and post:
         drop = mean(pre) - mean(post)
         report.add(
@@ -103,7 +133,9 @@ def run_verify(cfg: Config, *, log=print) -> VerifyReport:
         report.add(
             "retrieval_regression_visible",
             False,
-            f"need scores on both sides of {REINDEX_AT.date()} — got pre={len(pre)} post={len(post)}",
+            (f"need scores on both sides of {boundary.date()} (newest observed "
+             f"{newest.date()} − {REINDEX_OFFSET_DAYS}d) — got pre={len(pre)} post={len(post)}")
+            if boundary and newest else "no timestamped data to derive the boundary from",
         )
 
     # --- both outcomes are present, so the deflection story has two sides ----------------
