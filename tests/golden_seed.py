@@ -23,17 +23,30 @@ from synth.seed import run_seed
 
 CONFIG = Path(__file__).resolve().parent.parent / "config" / "demo.yaml"
 
+# The pinned as-of date — the third leg of the determinism law (`seed + target_traces +
+# as-of → byte-identical Spool`, portal #229). It lives HERE, in the dev-only gate, and
+# nowhere in `src/`: production resolves the date from the operator (or the clock), and the
+# oracle pins it so the golden bytes are reproducible on any day. It is the day the old
+# in-`src/` constant named, at the same noon anchor, so the blessed golden did not move.
+AS_OF_DATE = "2026-07-29"
+
 
 def seed(target_traces: int, params: Mapping[str, Any]) -> bytes:
     """Materialize the full pre-ingestion Spool for `target_traces` through the runtime seed
     path; return its bytes.
 
-    `target_traces` is set exactly as the portal sets it (`--set generation.target_traces=N`),
-    so this proves the operator knob end to end. `params` completes the gate contract; the
-    skeleton derives volume from the knob alone (identity hook), so it reads config defaults
-    for the rest.
+    `target_traces` and the as-of date are set exactly as the portal sets them (`--set
+    generation.target_traces=N` / `--set generation.as_of_date=YYYY-MM-DD`), so this proves
+    both operator knobs end to end. `params` completes the gate contract; the kit derives
+    volume from the knob alone (identity hook), so it reads config defaults for the rest.
     """
-    cfg = load_config(str(CONFIG), overrides=[f"generation.target_traces={int(target_traces)}"])
+    cfg = load_config(
+        str(CONFIG),
+        overrides=[
+            f"generation.target_traces={int(target_traces)}",
+            f"generation.as_of_date={AS_OF_DATE}",
+        ],
+    )
     with tempfile.TemporaryDirectory(prefix="synth-golden-") as tmp:
         spool_path = Path(tmp) / "events.ndjson"
         # dry_run: no guardrail call, no network; do_import=False: never touch Langfuse.

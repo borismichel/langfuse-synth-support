@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from langfuse_synth_core.config import load_config as _load_config
 from langfuse_synth_core.derivation import identity_derivation
+from langfuse_synth_core.timegen import parse_as_of_date
 
 
 @dataclass
@@ -39,6 +41,12 @@ class Target:
 class Generation:
     seed: int = 42
     target_traces: int = 1000
+    # The operator's as-of date: the portal sends `--set generation.as_of_date=YYYY-MM-DD`
+    # on every forward generate (portal #72), and the seeded window ends on that day. None
+    # means "no tether set" — the CLI path and the no-tether portal path both omit the key —
+    # and resolves to the wall clock at seed time (`timegen.resolve_run_date`). A future date
+    # is by design (portal #229): never clamp, warn or reject it.
+    as_of_date: date | None = None
 
 
 @dataclass
@@ -60,6 +68,7 @@ def _model_factory(raw: dict) -> Config:
         generation=Generation(
             seed=int(generation.get("seed", 42)),
             target_traces=int(generation.get("target_traces", 1000)),
+            as_of_date=parse_as_of_date(generation.get("as_of_date")),
         ),
     )
 

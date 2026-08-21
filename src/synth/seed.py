@@ -23,6 +23,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from langfuse_synth_core.seed.ingest import Ingestor, assert_demo_project
+from langfuse_synth_core.timegen import resolve_run_date
 
 from .artifacts import publish_runbook
 from .config import Config
@@ -41,7 +42,16 @@ def run_seed(
 ) -> Path:
     """Generate the Spool and (unless `dry_run`) ingest it into the target Langfuse project."""
     spool_path = Path(spool_path) if spool_path else DEFAULT_SPOOL
-    events = build_events(cfg.generation.target_traces, {"seed": cfg.generation.seed})
+    # The run anchor: the operator's as-of date (portal `--set generation.as_of_date=…`),
+    # or the wall clock when none was set. The only place either is read — `materialize`
+    # takes it as a parameter, which is what makes `seed + target_traces + as-of` the whole
+    # input to the Spool's bytes (portal #229).
+    run_date = resolve_run_date(cfg.generation.as_of_date)
+    log(f"· run anchor {run_date.isoformat()}"
+        + (" (as-of date)" if cfg.generation.as_of_date else " (now)"))
+    events = build_events(
+        cfg.generation.target_traces, {"seed": cfg.generation.seed}, run_date=run_date
+    )
 
     # Guardrail: refuse to run unless the key's project name matches `project_hint`.
     if not dry_run:

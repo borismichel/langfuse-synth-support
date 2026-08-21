@@ -15,14 +15,34 @@ from __future__ import annotations
 
 import pathlib
 import re
+from datetime import date, datetime, timedelta, timezone
 
+import pytest
 from langfuse_synth_core import read
 
 from synth import verify as V
 from synth.config import load_config
+from synth.materialize import REINDEX_OFFSET_DAYS
 
-PRE_TS = "2026-07-10T12:00:00.000Z"    # < REINDEX_AT
-POST_TS = "2026-07-25T12:00:00.000Z"   # >= REINDEX_AT
+
+def _iso(d: datetime) -> str:
+    return d.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _today() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+# The canned project is served relative to an as-of anchor `verify` is never told (portal
+# #229): it must derive the re-index boundary from the newest data it reads. The default
+# anchor is a month in the past — the "verify re-run days after seed" case; the
+# parametrised tests below move it to today and to a fortnight out.
+_DEFAULT_ANCHOR = datetime.combine(_today() - timedelta(days=30), datetime.min.time(),
+                                   tzinfo=timezone.utc).replace(hour=12)
+# Rows sit where the generator puts them: the healthy baseline well before the re-index,
+# the degraded tail reaching right up to the anchor (the newest thing that landed).
+PRE_TS = _iso(_DEFAULT_ANCHOR - timedelta(days=REINDEX_OFFSET_DAYS + 5))   # pre-re-index
+POST_TS = _iso(_DEFAULT_ANCHOR - timedelta(hours=1))                       # post-re-index
 
 
 class _Resp:
@@ -40,17 +60,27 @@ class _Resp:
 
 
 def _install_seeded_env(monkeypatch, *, post_relevance: float = 0.52,
-                        resolutions=("self_served", "escalated")) -> None:
-    """Serve the canned seeded project as a v4 Langfuse — and only as one."""
+                        resolutions=("self_served", "escalated"),
+                        anchor: datetime | None = None) -> None:
+    """Serve the canned seeded project as a v4 Langfuse — and only as one.
+
+    `anchor` is the as-of date the canned data was "seeded" on; the rows sit on either
+    side of `anchor − REINDEX_OFFSET_DAYS`. `verify` is not told it.
+    """
+    pre_ts, post_ts = PRE_TS, POST_TS
+    if anchor is not None:
+        pre_ts = _iso(anchor - timedelta(days=REINDEX_OFFSET_DAYS + 5))
+        post_ts = _iso(anchor - timedelta(hours=1))
+
     def score_rows(name):
         if name == "retrieval_relevance":
-            rows = [(PRE_TS, "NUMERIC", 0.86, None), (PRE_TS, "NUMERIC", 0.84, None),
-                    (POST_TS, "NUMERIC", post_relevance, None),
-                    (POST_TS, "NUMERIC", post_relevance, None)]
+            rows = [(pre_ts, "NUMERIC", 0.86, None), (pre_ts, "NUMERIC", 0.84, None),
+                    (post_ts, "NUMERIC", post_relevance, None),
+                    (post_ts, "NUMERIC", post_relevance, None)]
         elif name == "resolution":
-            rows = [(POST_TS, "CATEGORICAL", label, None) for label in resolutions]
+            rows = [(post_ts, "CATEGORICAL", label, None) for label in resolutions]
         elif name == "deflected":
-            rows = [(POST_TS, "BOOLEAN", 1.0, "session")]
+            rows = [(post_ts, "BOOLEAN", 1.0, "session")]
         else:
             rows = []
         out = []
@@ -62,7 +92,7 @@ def _install_seeded_env(monkeypatch, *, post_relevance: float = 0.52,
         return out
 
     generations = [{"id": "o1", "traceId": "t1", "type": "GENERATION", "name": "draft-reply",
-                    "startTime": POST_TS}]
+                    "startTime": post_ts}]
 
     def handler(method, url, *, params=None, auth=None, timeout=30, throttle_s=0.0,
                 attempts=8):
@@ -79,10 +109,10 @@ def _install_seeded_env(monkeypatch, *, post_relevance: float = 0.52,
             else:
                 rows = [{"id": "root-t1", "traceId": "t1", "type": "SPAN",
                          "name": "support-triage-turn", "sessionId": "S-1",
-                         "startTime": POST_TS},
+                         "startTime": post_ts},
                         {"id": "root-t2", "traceId": "t2", "type": "SPAN",
                          "name": "support-triage-turn", "sessionId": "S-1",
-                         "startTime": PRE_TS}]
+                         "startTime": pre_ts}]
             return _Resp(200, {"data": rows, "meta": {}})
         if path == "/api/public/v3/scores":
             return _Resp(200, {"data": score_rows(params.get("name")), "meta": {}})
@@ -148,3 +178,43 @@ def test_verify_names_the_v4_read_apis_in_its_log(monkeypatch):
     lines: list[str] = []
     V.run_verify(load_config("config/demo.yaml"), log=lines.append)
     assert any("v4 read APIs" in line for line in lines), lines
+
+
+# --- the boundary is derived from the data, not told (portal #229) -----------------------
+@pytest.mark.parametrize("anchor_day", [
+    pytest.param(_today(), id="as-of-today"),
+    pytest.param(_today() + timedelta(days=14), id="as-of-a-fortnight-out"),
+    pytest.param(_today() - timedelta(days=30), id="verify-re-run-a-month-after-seed"),
+])
+def test_boundary_checks_pass_whatever_day_the_data_was_seeded_on(monkeypatch, anchor_day):
+    """`verify` is never handed the as-of date: it takes the newest observed timestamp as
+    the run-date proxy and subtracts the generator's offset. So the two boundary checks
+    pass for a pool seeded as of today, one tethered a fortnight into the future, and one
+    verified long after its seed — the case that rules out recomputing `now − offset`."""
+    anchor = datetime.combine(anchor_day, datetime.min.time(), tzinfo=timezone.utc)
+    _install_seeded_env(monkeypatch, anchor=anchor.replace(hour=12))
+    checks = _run()
+    assert checks["retrieval_regression_visible"] is True
+    assert checks["post_reindex_breaches_floor"] is True
+
+
+def test_verify_reads_no_clock_and_no_seed_constant():
+    """The boundary must come from the data: no wall clock (wrong on a re-run days later),
+    no anchor imported from the generator (that would replay seed's own assumption)."""
+    body = "\n".join(line for line in pathlib.Path("src/synth/verify.py")
+                      .read_text(encoding="utf-8").splitlines()
+                      if not line.lstrip().startswith("#"))
+    body = body.split('"""', 2)[-1]
+    for forbidden in ("REINDEX_AT", "RUN_DATE", "now_utc", "datetime.now", "date.today"):
+        assert forbidden not in body, forbidden
+
+
+def test_no_timestamped_data_is_a_failed_check_not_a_crash(monkeypatch):
+    _install_seeded_env(monkeypatch)
+    def empty(*_a, **_k):
+        return []
+
+    monkeypatch.setattr(read.LangfuseReader, "scores", empty)
+    monkeypatch.setattr(read.LangfuseReader, "traces", empty)
+    checks = _run()
+    assert checks["retrieval_regression_visible"] is False

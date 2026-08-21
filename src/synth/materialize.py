@@ -7,9 +7,12 @@ retrieval rounds, stuffs more context into the drafting model, and hands off to 
 more often. Nothing throws. The only visible symptoms are the ones an observability tool is
 supposed to surface — deflection rate down, cost per ticket up, latency up.
 
-Everything here derives from the seeded `Rng` and the fixed `RUN_DATE` anchor, so the same
-inputs yield a byte-identical Spool every run. No model call, no network, no wall clock —
-the determinism golden gate runs this under a deny-LLM egress block.
+Everything here derives from the seeded `Rng` and the `run_date` anchor `synth.seed` hands
+in — the operator's as-of date, or now when none was set (portal #229) — so the same inputs
+yield a byte-identical Spool every run, on any day. No model call, no network, no wall
+clock, and no date constant: every date in the story is an OFFSET from `run_date`. The
+determinism golden gate runs this under a deny-LLM egress block and pins the anchor in
+`tests/golden_seed.py`, where determinism belongs.
 
 Langfuse data-model choices (made against current docs, not memory):
 
@@ -28,7 +31,7 @@ Langfuse data-model choices (made against current docs, not memory):
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from langfuse_synth_core.rng import Rng
@@ -42,14 +45,22 @@ from langfuse_synth_core.timegen import sample_timestamps
 
 from .config import DERIVATION_HOOK
 
-# Fixed anchor so backdated timestamps are reproducible run-to-run (the gate materializes
-# in a subprocess and may read no wall clock).
-RUN_DATE = datetime(2026, 7, 29, 12, 0, 0, tzinfo=timezone.utc)
+# The backdated window ends at the run anchor and reaches this many days back.
 WINDOW_DAYS = 28
 
-# The regression boundary: the KB re-index lands 10 days before the run date, leaving a
-# long healthy baseline before it and a clearly degraded tail after it.
-REINDEX_AT = RUN_DATE - timedelta(days=10)
+# The regression boundary: the KB re-index lands this many days before the run anchor,
+# leaving a long healthy baseline before it and a clearly degraded tail after it.
+REINDEX_OFFSET_DAYS = 10
+
+
+def reindex_at(run_date: datetime) -> datetime:
+    """When the KB re-index landed, relative to the run anchor.
+
+    `verify` runs in a different container, possibly days later, and is never told the
+    anchor — it derives one from the newest data it reads and applies this same offset
+    (see `synth.verify`). Keep the two in step through this function.
+    """
+    return run_date - timedelta(days=REINDEX_OFFSET_DAYS)
 
 INTENTS = ("billing", "technical", "account", "shipping")
 CHANNELS = ("web-widget", "email", "in-app")
@@ -106,17 +117,22 @@ def _retrieval_profile(r: Rng, post_reindex: bool) -> tuple[int, float]:
     return rounds, best
 
 
-def build_events(target_traces: int, params: Mapping[str, Any]) -> list[dict]:
+def build_events(
+    target_traces: int, params: Mapping[str, Any], *, run_date: datetime
+) -> list[dict]:
     """Materialize the full pre-ingestion event stream, deterministically.
 
     `target_traces` is a direct trace (turn) count — the identity derivation — and tickets
     are formed by grouping consecutive turns, so the operator's one knob stays exact.
+    `run_date` is the resolved as-of anchor: the window ends there and the re-index sits
+    `REINDEX_OFFSET_DAYS` before it.
     """
     internal = DERIVATION_HOOK(target_traces, params)
     count = int(internal["target_traces"])
     seed = int(params.get("seed", 42))
     rng = Rng(seed)
-    timestamps = sample_timestamps(rng.sub("timestamps"), RUN_DATE, WINDOW_DAYS, count)
+    boundary = reindex_at(run_date)
+    timestamps = sample_timestamps(rng.sub("timestamps"), run_date, WINDOW_DAYS, count)
 
     events: list[dict] = []
 
@@ -168,7 +184,7 @@ def build_events(target_traces: int, params: Mapping[str, Any]) -> list[dict]:
         ticket["last_ts"] = ts
 
         r = rng.sub("turn", i)
-        post = ts >= REINDEX_AT
+        post = ts >= boundary
         index_version = "kb-v2" if post else "kb-v1"
         trace_id = r.trace_id(i)
 
