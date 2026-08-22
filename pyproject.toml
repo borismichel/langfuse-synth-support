@@ -1,6 +1,6 @@
 [project]
 name = "support-triage-deflection"
-version = "0.3.1"
+version = "0.3.2"
 description = "Demo Depot synth kit — a runnable-green walking skeleton scaffolded by `synth-authoring new`."
 requires-python = ">=3.11"
 dependencies = [
@@ -20,7 +20,7 @@ dependencies = [
     # be importable or the live console dies with ModuleNotFoundError on its first triage.
     # (Same reason the lender kit declares them directly.) Seed generation stays model-free:
     # these are companion-runtime deps, and the egress gate still proves seed never calls out.
-    "anthropic>=0.40.0",
+    "anthropic>=1.0.0",   # 1.0.0 removed the sampling params; core v4.1.1 no longer sends them (portal #231)
     "openai>=1.40.0",
 ]
 
