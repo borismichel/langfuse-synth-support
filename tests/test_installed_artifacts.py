@@ -45,3 +45,27 @@ def test_installed_wheel_publishes_unchanged_runbook(tmp_path):
         "from synth.artifacts import publish_runbook; publish_runbook()",
         str(installed), env=env)
     assert (output / "DEMO_SCRIPT.md").read_bytes() == expected
+
+
+def test_editable_install_publishes_source_runbook(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    source = tmp_path / "source"
+    shutil.copytree(repo, source, ignore=shutil.ignore_patterns(
+        ".git", ".pytest_cache", "__pycache__", "*.egg-info", "build", "dist",
+    ))
+    installed = tmp_path / "installed"
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--no-deps", "--no-index",
+         "--no-build-isolation", "--target", str(installed), "--editable", str(source)],
+        cwd=tmp_path, check=True, capture_output=True, text=True,
+    )
+    # Resolve only this editable install, not another checkout on the test runner's path.
+    output = tmp_path / "out"
+    subprocess.run(
+        [sys.executable, "-I", "-S", "-c",
+         "import site,sys; site.addsitedir(sys.argv[1]); "
+         "from synth.artifacts import publish_runbook; publish_runbook()", str(installed)],
+        cwd=tmp_path, env={**os.environ, "SYNTH_OUT_DIR": str(output)},
+        check=True, capture_output=True, text=True,
+    )
+    assert (output / "DEMO_SCRIPT.md").read_bytes() == (source / "DEMO_SCRIPT.md").read_bytes()
