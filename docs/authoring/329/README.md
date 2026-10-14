@@ -1,6 +1,8 @@
 # Support setup #329 evidence
 
-Source-ready candidate 0.3.3; release, live verification and admission are pending.
+Source-ready candidate 0.3.3; reviewed release, signature verification and registry update are pending.
+This is an existing registered-kit update; #324 does not require new-kit admission
+or a fresh live production run. Live checks were not run for this delta.
 Recorded 2026-10-14 against kit base ddaaa51f176a63822594e15b103ed9b7ac7c3425.
 Core v4.3.0 is installed from the immutable release, peeled commit
 ba4a4a276079ed49865becffc7955acde148147a. Both dependency pins and the publish
@@ -78,12 +80,12 @@ or SDK major version were introduced.
 | Accepted story | Passed offline at 200/1000; unchanged runbook beats, verifier results above. |
 | Deployment pipeline | Passed: existing seed→verify declaration retained and manifest test asserts it. |
 | Cost estimate and confirmation | Not applicable: explicit #329 pipeline contract has neither stage. Historical generation costs remain verified. |
-| Progress | Passed in authenticated Depot fixture: seed in progress, verify waiting; live progress pending. |
+| Progress | Passed in authenticated Depot fixture: seed in progress, verify waiting; live progress not re-exercised for this delta. |
 | Offline checks | Passed: validation, conformance,49 tests. |
-| Seed and scale | Passed offline at rehearsal 200 and presentation 1000; existing advertised 100000 maximum under deployed resource limits pending. |
-| Runtime assets | Existing prompts, score subjects and deterministic assets retained; live verification pending. |
-| Live verification | Pending: no remote target used or seeded for this change. |
-| Companion | Offline conformance health/index passed; delivered interaction rehearsal pending. |
-| Presenter delivery | Artifact publication tested; Depot setup/save/resume screenshots recorded in matching portal evidence. Native Langfuse story rehearsal pending. |
-| Release and admission | Pending: root coordinates reviewed 0.3.3 release, signed image and admission. |
+| Seed and scale | Passed offline at rehearsal 200 and presentation 1000; existing advertised 100000 maximum is unchanged and was not revalidated under deployed resource limits; that inherited limit is outside this narrow delta. |
+| Runtime assets | Existing prompts, score subjects and deterministic assets retained; live checks not run for this delta. |
+| Live verification | Not run: no remote target used or seeded; a fresh live production run is not required for this existing-kit update. |
+| Companion | Offline conformance health/index passed; delivered interactions not re-exercised for this delta. |
+| Presenter delivery | Artifact publication tested; Depot setup/save/resume screenshots recorded in matching portal evidence. Native Langfuse story was not re-exercised for this delta. |
+| Release and registry | Pending: root coordinates reviewed 0.3.3 release, exact image signature verification and existing registry bump. New-kit admission is not applicable. |
 | Publication | Pending: no tag, push, main merge or registry write performed by this task. |
