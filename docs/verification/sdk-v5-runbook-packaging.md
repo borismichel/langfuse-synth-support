@@ -10,9 +10,13 @@ The pre-agreed test seam is installed-distribution publication of the unchanged 
 
 Validation on Python 3.12:
 
-- 51 tests passed, no skips, including the installed-wheel regression and unchanged full deterministic Spool golden.
+- 52 tests passed, no skips, including installed-wheel and real editable-install publication regressions and the unchanged full deterministic Spool golden.
 - Manifest validation and enforcing Contract conformance passed (stateless anchor check legitimately inapplicable).
 - A new disposable container used the verified v0.3.5 runtime base plus the locally built v0.3.6 wheel. It ran network-disabled with a read-only root and no capabilities. A tmpfs hid /app, so the source checkout was inaccessible at its usual location; isolated Python imported only the candidate install. It published /app/out/DEMO_SCRIPT.md, 8873 bytes, SHA256 0f60c7756cd1098b5f29e542aa0c9e98254464d6abed7338ef1eb08e48b4ce27, matching the unchanged source.
 - Golden SHA256 unchanged: ea081d24f60c258aa6c18064b6b8d2e07f857cc746c8acba0c3dd5f6e4b2f903.
 
 The container check proves candidate packaging in the runtime environment; it is not a signed v0.3.6 release receipt. Independent review, immutable publication and a fresh normal admission confirming Depot collects and renders the runbook remain release obligations.
+
+## Editable-install correction
+
+The first candidate passed wheel publication but CI failed during `pip install -e '.[dev]'`: setuptools intentionally skips copying package files in editable mode, leaving no build_lib/synth directory. The custom hook incorrectly tried to copy the runbook into that absent directory. A real offline editable installation into an isolated target reproduced the failure before correction. The hook now respects setuptools' editable_mode flag; editable publication uses the existing canonical source fallback. The test resolves the actual editable install from an unrelated directory under isolated Python site handling, then verifies the published runbook bytes. Both installation paths now pass, and the disposable network-disabled/read-only container proof was rerun successfully with the corrected wheel.
