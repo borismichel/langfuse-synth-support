@@ -25,9 +25,9 @@ from pathlib import Path
 from langfuse_synth_core.seed.ingest import Ingestor, assert_demo_project
 from langfuse_synth_core.timegen import resolve_run_date
 
-from .artifacts import publish_runbook
+from .artifacts import publish_runbook, publish_schedule
 from .config import Config
-from .materialize import build_events
+from .materialize import WINDOW_DAYS, build_events
 
 DEFAULT_SPOOL = Path(".synth_spool") / "events.ndjson"
 
@@ -72,4 +72,5 @@ def run_seed(
     # exits. Skipped under dry_run so the determinism gate stays a pure read of the Spool.
     if not dry_run:
         publish_runbook(log=log)
+        publish_schedule(spool_path, run_date, WINDOW_DAYS, log=log)
     return spool_path

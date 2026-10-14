@@ -1,0 +1,146 @@
+[
+  {
+    "volume": 200,
+    "span_count": 1136,
+    "trace_count": 200,
+    "sessions": 126,
+    "generated_range": {
+      "start": "2026-09-19T05:20:31.825600+00:00",
+      "end": "2026-10-16T17:28:45.031483+00:00"
+    },
+    "score_range": {
+      "start": "2026-09-19T05:20:32.791Z",
+      "end": "2026-10-16T17:28:45.031Z"
+    },
+    "score_counts": {
+      "retrieval_relevance": 302,
+      "groundedness": 200,
+      "resolution": 200,
+      "user_feedback": 47,
+      "deflected": 126
+    },
+    "resolutions": {
+      "self_served": 166,
+      "escalated": 34
+    },
+    "checks": [
+      {
+        "name": "traces_present",
+        "ok": true,
+        "detail": "100 trace(s) sampled"
+      },
+      {
+        "name": "selected_day_present",
+        "ok": true,
+        "detail": "8 sampled support trace(s) on 2026-10-16 UTC"
+      },
+      {
+        "name": "sessions_grouped",
+        "ok": true,
+        "detail": "66 session(s) across 100 sampled trace(s)"
+      },
+      {
+        "name": "retrieval_relevance_present",
+        "ok": true,
+        "detail": "302 retrieval_relevance score(s)"
+      },
+      {
+        "name": "retrieval_regression_visible",
+        "ok": true,
+        "detail": "pre=0.820 (n=163) post=0.575 (n=139) drop=0.245 (need >= 0.15)"
+      },
+      {
+        "name": "post_reindex_breaches_floor",
+        "ok": true,
+        "detail": "post-reindex mean 0.575 sits at the escalation floor (0.55)"
+      },
+      {
+        "name": "both_resolutions_present",
+        "ok": true,
+        "detail": "resolution labels: ['escalated', 'self_served']"
+      },
+      {
+        "name": "session_deflection_scored",
+        "ok": true,
+        "detail": "126 session-level deflected score(s)"
+      },
+      {
+        "name": "generation_cost_attributed",
+        "ok": true,
+        "detail": "400/400 sampled generation(s) carry a USD cost"
+      }
+    ]
+  },
+  {
+    "volume": 1000,
+    "span_count": 5745,
+    "trace_count": 1000,
+    "sessions": 624,
+    "generated_range": {
+      "start": "2026-09-19T05:26:33.064690+00:00",
+      "end": "2026-10-16T19:24:49.748298+00:00"
+    },
+    "score_range": {
+      "start": "2026-09-19T05:26:34.030Z",
+      "end": "2026-10-16T19:24:49.748Z"
+    },
+    "score_counts": {
+      "retrieval_relevance": 1536,
+      "groundedness": 1000,
+      "resolution": 1000,
+      "user_feedback": 209,
+      "deflected": 624
+    },
+    "resolutions": {
+      "self_served": 791,
+      "escalated": 209
+    },
+    "checks": [
+      {
+        "name": "traces_present",
+        "ok": true,
+        "detail": "100 trace(s) sampled"
+      },
+      {
+        "name": "selected_day_present",
+        "ok": true,
+        "detail": "34 sampled support trace(s) on 2026-10-16 UTC"
+      },
+      {
+        "name": "sessions_grouped",
+        "ok": true,
+        "detail": "67 session(s) across 100 sampled trace(s)"
+      },
+      {
+        "name": "retrieval_relevance_present",
+        "ok": true,
+        "detail": "1536 retrieval_relevance score(s)"
+      },
+      {
+        "name": "retrieval_regression_visible",
+        "ok": true,
+        "detail": "pre=0.812 (n=787) post=0.548 (n=749) drop=0.264 (need >= 0.15)"
+      },
+      {
+        "name": "post_reindex_breaches_floor",
+        "ok": true,
+        "detail": "post-reindex mean 0.548 sits at the escalation floor (0.55)"
+      },
+      {
+        "name": "both_resolutions_present",
+        "ok": true,
+        "detail": "resolution labels: ['escalated', 'self_served']"
+      },
+      {
+        "name": "session_deflection_scored",
+        "ok": true,
+        "detail": "624 session-level deflected score(s)"
+      },
+      {
+        "name": "generation_cost_attributed",
+        "ok": true,
+        "detail": "2000/2000 sampled generation(s) carry a USD cost"
+      }
+    ]
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "kit": "/private/tmp/depot-324-repos/support-329",
+  "local_ready": true,
+  "live_verification": "not_run",
+  "admission": "not_run",
+  "stages": [
+    {
+      "name": "validate",
+      "status": "passed",
+      "exit_code": 0,
+      "output": "Python: /private/tmp/depot-329-env/bin/python; core: /private/tmp/depot-329-env/lib/python3.12/site-packages/langfuse_synth_core/__init__.py\n\u2713 /private/tmp/depot-324-repos/support-329/usecase.yaml \u2014 valid (slug: support-triage-deflection)",
+      "next_action": ""
+    },
+    {
+      "name": "conformance",
+      "status": "passed",
+      "exit_code": 0,
+      "output": "Python: /private/tmp/depot-329-env/bin/python; core: /private/tmp/depot-329-env/lib/python3.12/site-packages/langfuse_synth_core/__init__.py\nmanifest passes the blocking Contract lint (synth-authoring validate)\nlive surface declared per contract; command parses clean under the fixed companion invocation and rejects `--set`\ncompanion serves its declared health path and renders its index offline, secret-free\nevery observation type the kit names is one Langfuse recognises\nno deprecated Langfuse endpoint reached: observations go out as OTLP spans, scores as `score-create`, and every read goes through the read seam\nstateless kit \u2014 no `synth.state` module; anchors checks skipped (statelessness is a legitimate contract citizen, CONTRACT.md \u00a7\"Per-run anchors (opt-in)\")",
+      "next_action": ""
+    },
+    {
+      "name": "tests",
+      "status": "passed",
+      "exit_code": 0,
+      "output": "Python: /private/tmp/depot-329-env/bin/python; core: /private/tmp/depot-329-env/lib/python3.12/site-packages/langfuse_synth_core/__init__.py\n.................................................                        [100%]\n49 passed in 3.28s",
+      "next_action": ""
+    }
+  ]
+}

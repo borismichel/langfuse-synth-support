@@ -41,11 +41,11 @@ from langfuse_synth_core.seed.events import (
     score_event,
     trace_event,
 )
-from langfuse_synth_core.timegen import sample_timestamps
+from langfuse_synth_core.timegen import sample_inclusive_timestamps
 
 from .config import DERIVATION_HOOK
 
-# The backdated window ends at the run anchor and reaches this many days back.
+# Inclusive UTC calendar days ending on the selected as-of date.
 WINDOW_DAYS = 28
 
 # The regression boundary: the KB re-index lands this many days before the run anchor,
@@ -132,7 +132,15 @@ def build_events(
     seed = int(params.get("seed", 42))
     rng = Rng(seed)
     boundary = reindex_at(run_date)
-    timestamps = sample_timestamps(rng.sub("timestamps"), run_date, WINDOW_DAYS, count)
+    timestamps = sample_inclusive_timestamps(rng.sub("timestamps"), run_date, WINDOW_DAYS, count)
+    # Sparse Custom volumes still include the selected day without adding a trace.
+    selected_day = run_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    if timestamps and timestamps[-1] < selected_day:
+        timestamps[-1] = selected_day + timedelta(hours=12)
+    # A turn is at most 5.33 seconds plus up to 900 seconds of delayed feedback.
+    # Move its start, preserving every child duration and score offset.
+    latest_start = selected_day + timedelta(days=1, minutes=-16)
+    timestamps = [min(ts, latest_start) for ts in timestamps]
 
     events: list[dict] = []
 
