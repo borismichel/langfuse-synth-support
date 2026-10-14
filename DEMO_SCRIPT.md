@@ -29,10 +29,15 @@ in Langfuse. It lands tracing, sessions, cost tracking, scores, and user feedbac
 ## 2. Setup
 
 - Deploy the kit. The pipeline runs `synth seed` (generate + ingest) then `synth verify`.
-- Volume knob: **Target traces** (`generation.target_traces`) — the single operator
-  control. 2,000 gives a convincing 28-day picture; 500 is enough for a short session.
-- The data covers a 28-day window. The re-index lands 10 days before the end, so the
-  charts have a long healthy baseline and a clear degraded tail.
+- **Presentation** generates 1,000 traces with seed 42. **Quick rehearsal** generates
+  200 traces and retains both retrieval cohorts, both resolution outcomes, session
+  deflection scores and attributed generation cost. **Custom** exposes target traces
+  and generation seed. Very small Custom volumes may fail the scenario verification.
+- **Data as of** is the latest UTC calendar day represented. History is fixed at
+  28 inclusive UTC days; selecting 16 October covers 19 September–16 October.
+  The re-index lands 10 days before the noon UTC anchor. The generated schedule
+  artifact records the requested calendar and actual observation start/end range.
+- The pipeline remains seed → verify; this kit declares no separate plan stage.
 - If the Companion is enabled, open it in a second tab before you start. You will use it
   in beat 5.
 

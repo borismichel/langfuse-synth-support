@@ -50,6 +50,23 @@ config_schema:
         knob for this demo; the kit deterministically derives its internal generation
         params from it.
   required: []
+setup:
+  version: 1
+  schedule:
+    timezone: UTC
+    end: inclusive
+    history:
+      fixed_days: 28
+  fields:
+    generation.target_traces:
+      group: volume
+    generation.seed:
+      group: advanced
+  presets:
+    quick_rehearsal:
+      label: Quick rehearsal
+      values:
+        generation.target_traces: 200
 pipeline:
 - id: seed
   run: synth seed --config {config}
@@ -61,6 +78,9 @@ artifacts:
 - path: DEMO_SCRIPT.md
   render: markdown
   title: Presenter Runbook
+- path: SCHEDULE.json
+  render: json
+  title: Generated schedule
 assets:
   docs:
   - path: README.md

@@ -25,9 +25,9 @@ existing deployment), and this kit is deliberately stateless (the only kit passi
 So `verify` takes the newest observed timestamp as the run-date proxy and subtracts the
 same `REINDEX_OFFSET_DAYS` the generator used. That is also what makes the two boundary
 checks real assertions about what landed rather than a replay of `seed`'s own input.
-The proxy sits a few hours short of the true anchor (the last sample lands on its eve),
-which shifts the split by at most a day against a ten-day tail — the checks are
-statistical, so that does not move the verdict.
+The proxy falls on the selected calendar day. Its time of day can differ from the
+noon anchor, so the checks retain their statistical margin against a ten-day tail.
+When the requested date is available, verification also requires actual activity on it.
 """
 from __future__ import annotations
 
@@ -84,6 +84,16 @@ def run_verify(cfg: Config, *, log=print) -> VerifyReport:
     # --- the data landed at all ---------------------------------------------------------
     traces = reader.traces(limit=100)
     report.add("traces_present", len(traces) > 0, f"{len(traces)} trace(s) sampled")
+
+    if cfg.generation.as_of_date is not None:
+        selected = cfg.generation.as_of_date
+        on_selected_day = [trace for trace in traces
+                           if trace.name == "support-triage-turn" and trace.timestamp
+                           and trace.timestamp.date() == selected]
+        report.add(
+            "selected_day_present", bool(on_selected_day),
+            f"{len(on_selected_day)} sampled support trace(s) on {selected.isoformat()} UTC",
+        )
 
     # --- tickets are grouped into sessions ----------------------------------------------
     sessions = {t.session_id for t in traces if t.session_id}
