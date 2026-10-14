@@ -35,9 +35,7 @@ def _window_end(stamps: list[str]) -> date:
 
 
 def _assert_ends_on(stamps: list[str], as_of: date) -> None:
-    # `sample_timestamps` draws whole hours up to the anchor day's midnight, so the newest
-    # sample lands late on the eve of the as-of date (or on it) — never after it.
-    assert as_of - timedelta(days=1) <= _window_end(stamps) <= as_of, (max(stamps), as_of)
+    assert _window_end(stamps) == as_of, (max(stamps), as_of)
 
 
 def test_the_override_lands_on_the_config_as_a_date():

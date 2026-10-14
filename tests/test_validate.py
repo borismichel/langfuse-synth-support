@@ -31,3 +31,19 @@ def test_manifest_exposes_the_canonical_volume_knob():
     props = doc["config_schema"]["properties"]
     assert "generation.target_traces" in props
     assert props["generation.target_traces"]["type"] == "integer"
+
+
+def test_support_declares_fixed_history_and_authored_rehearsal_without_a_plan():
+    import yaml
+    from synth.config import load_config
+
+    doc = yaml.safe_load(MANIFEST.read_text())
+    setup = doc['setup']
+    assert setup['schedule'] == {
+        'timezone': 'UTC', 'end': 'inclusive', 'history': {'fixed_days': 28},
+    }
+    assert setup['presets']['quick_rehearsal']['values'] == {'generation.target_traces': 200}
+    cfg = load_config('config/demo.yaml')
+    assert doc['config_schema']['properties']['generation.target_traces']['default'] == cfg.generation.target_traces == 1000
+    assert doc['config_schema']['properties']['generation.seed']['default'] == cfg.generation.seed == 42
+    assert [step['id'] for step in doc['pipeline']] == ['seed', 'verify']

@@ -9,9 +9,11 @@ without pretending they are deployments.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
+from datetime import datetime, timezone
 
 DEFAULT_OUT_DIR = Path("/app/out")
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -52,3 +54,28 @@ def publish_runbook(log=print) -> Path | None:
         return None
     log(f"· published {RUNBOOK} -> {destination}")
     return destination
+
+
+def publish_schedule(spool_path: Path, run_date: datetime, history_days: int, log=print) -> Path:
+    """Publish the requested calendar and the finalized Spool's observation bounds."""
+    earliest = latest = None
+    with spool_path.open() as spool:
+        for line in spool:
+            event = json.loads(line)
+            if "spanId" not in event:
+                continue
+            start, end = int(event["startTimeUnixNano"]), int(event["endTimeUnixNano"])
+            earliest = start if earliest is None else min(earliest, start)
+            latest = end if latest is None else max(latest, end)
+    def iso(nanos: int) -> str:
+        return datetime.fromtimestamp(nanos / 1e9, timezone.utc).isoformat().replace("+00:00", "Z")
+    path = artifact_path("SCHEDULE.json")
+    path.write_text(json.dumps({
+        "version": 1,
+        "requested": {"as_of_date": run_date.date().isoformat(), "history_days": history_days,
+                      "timezone": "UTC", "end": "inclusive"},
+        "generated_range": {"start": iso(earliest), "end": iso(latest), "timezone": "UTC"}
+                           if earliest is not None else None,
+    }, indent=2) + "\n")
+    log(f"· published generated schedule -> {path}")
+    return path

@@ -102,3 +102,15 @@ calls a real model. That is allowed precisely because it is not seed runtime.
 
 5. `synth verify --config config/demo.yaml` against a live seeded project — it asserts the
    regression is actually visible, not just that rows landed.
+
+## Setup schedule and presets
+
+The Manifest declares a fixed 28-day UTC history ending on the selected **Data as of**
+date, including future dates. Presentation uses 1,000 traces and seed 42; Quick rehearsal
+uses 200 traces. Custom exposes both seed and trace count. Both presets retain retrieval
+regression, both resolution outcomes, session-level deflection and generation costs.
+Tiny Custom datasets can fail these scenario checks.
+
+The existing seed → verify pipeline is unchanged. `SCHEDULE.json` reports the selected
+calendar and the measured finalized observation range alongside the Presenter Runbook.
+Changing project expiry does not change this generated history.
