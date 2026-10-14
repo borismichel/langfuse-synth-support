@@ -2,8 +2,9 @@
 
 Per `CONTRACT.md` ("Filesystem conventions") the worker collects declared artifacts from
 the container's `/app/out/` after the producing step exits. The committed `DEMO_SCRIPT.md`
-at the repo root is the *source*; `synth seed` publishes a copy into the artifact dir so
-the portal has something to collect. Outside a container — a local `synth seed` run — the
+at the repo root is the source, included as package data when built. `synth seed`
+publishes a copy into the artifact dir so the portal has something to collect.
+Outside a container — a local `synth seed` run — the
 `/app/out` mkdir fails and we fall back to the repo root, which keeps local runs working
 without pretending they are deployments.
 """
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
+from importlib.resources import files
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -40,15 +41,15 @@ def publish_runbook(log=print) -> Path | None:
     A missing source or an unwritable destination is reported and shrugged off: failing the
     seed step over a docs copy would cost the operator the whole dataset.
     """
-    source = REPO_ROOT / RUNBOOK
+    source = files("synth").joinpath(RUNBOOK)
+    if not source.is_file():
+        source = REPO_ROOT / RUNBOOK  # unbuilt source checkout
     destination = artifact_path(RUNBOOK)
-    if not source.exists():
+    if not source.is_file():
         log(f"! {RUNBOOK} not found at {source} — nothing to publish")
         return None
-    if source.resolve() == destination.resolve():
-        return destination  # local run with no artifact dir: the source IS the artifact
     try:
-        shutil.copyfile(source, destination)
+        destination.write_bytes(source.read_bytes())
     except OSError as exc:
         log(f"! could not publish {RUNBOOK} to {destination}: {exc}")
         return None

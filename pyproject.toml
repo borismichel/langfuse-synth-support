@@ -1,6 +1,6 @@
 [project]
 name = "support-triage-deflection"
-version = "0.3.5"
+version = "0.3.6"
 description = "Demo Depot synth kit — a runnable-green walking skeleton scaffolded by `synth-authoring new`."
 requires-python = ">=3.11"
 dependencies = [
@@ -25,6 +25,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<9",
+    # Build and install distributions offline in the runbook packaging regression.
+    "setuptools>=68",
+    "wheel>=0.43",
     # The determinism golden gate + `synth-authoring validate/freeze` ride the [authoring]
     # extra. SAME ref as the runtime pin above — the gate and the core the kit runs against
     # must be the one, identical build. Bump both pins together, never let them drift.
