@@ -135,9 +135,12 @@ def _run_triage(adapter: CompanionAdapter, question: str, index_version: str,
     def trace_metadata(intent: str | None) -> dict:
         """The trace's correlating metadata. `intent` is the only part that is not known
         when the trace opens — the classifier that produces it runs inside."""
-        return {"intent": intent, "channel": "companion", "turn": turn_no,
-                "kb_index_version": index_version,
-                "post_reindex": index_version == "kb-v2"}
+        metadata = {"channel": "companion", "turn": turn_no,
+                    "kb_index_version": index_version,
+                    "post_reindex": index_version == "kb-v2"}
+        if intent is not None:
+            metadata["intent"] = intent
+        return metadata
 
     with emitter.trace(
             "support-triage-turn", user_id="companion-console", session_id=session_id,
