@@ -37,18 +37,16 @@ config_schema:
       default: 42
       minimum: 0
       title: Generation seed
-      description: Deterministic RNG seed for the whole dataset. Vary it to mint a
-        distinct trace/id set per deployment; the same seed regenerates the identical
-        Spool bytes (importing them twice is refused — OTLP appends, it does not upsert).
+      description: Controls deterministic sampling and generated IDs. Reproducing a
+        dataset also requires the same configuration and Data as of date. Re-seeding
+        an existing project can add duplicate data; use a separate demo project.
     generation.target_traces:
       type: integer
       minimum: 1
       maximum: 100000
       default: 1000
       title: Target traces
-      description: Total number of traces to generate. The single, uniform volume
-        knob for this demo; the kit deterministically derives its internal generation
-        params from it.
+      description: Total number of traces to generate.
   required: []
 setup:
   version: 1

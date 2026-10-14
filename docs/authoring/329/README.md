@@ -89,3 +89,14 @@ or SDK major version were introduced.
 | Presenter delivery | Artifact publication tested; Depot setup/save/resume screenshots recorded in matching portal evidence. Native Langfuse story was not re-exercised for this delta. |
 | Release and registry | Pending: root coordinates reviewed 0.3.3 release, exact image signature verification and existing registry bump. New-kit admission is not applicable. |
 | Publication | Pending: no tag, push, main merge or registry write performed by this task. |
+
+## Copy correction candidate 0.3.4
+
+The final Depot copy audit found implementation terminology in the target-trace
+field description and an incomplete reproducibility claim in the seed description.
+Version 0.3.4 labels trace volume directly and explains that reproducibility also
+requires the same configuration and Data as of date, retaining the duplicate-data
+warning. All runtime code, defaults, limits, schedule behavior and core pins remain
+unchanged from 0.3.3. Manifest validation passes. This copy correction requires no
+new seed or live verification; its review, CI and signed image publication remain
+release-coordinator steps. The existing 0.3.3 release remains immutable.
